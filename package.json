@@ -1,0 +1,30 @@
+{
+  "name": "question-paper-shuffler",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generate multiple shuffled sets of a NEET-style Word question paper, with a matching answer key per set.",
+  "main": "dist/main/main.js",
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "fix:electron": "node scripts/fix-electron.mjs",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "tsc -p tsconfig.renderer.json",
+    "build:assets": "node scripts/copy-assets.mjs",
+    "build": "npm run build:main && npm run build:renderer && npm run build:assets",
+    "start": "npm run build && electron .",
+    "cli": "npm run build:main && node dist/cli/cli.js",
+    "ui:harness": "npm run build && node scripts/ui-harness.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@xmldom/xmldom": "^0.9.8",
+    "jszip": "^3.10.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "electron": "^33.3.1",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}

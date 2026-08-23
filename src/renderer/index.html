@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;" />
+    <title>Question Paper Shuffler</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app__header">
+        <h1>Question Paper Shuffler</h1>
+        <p>Generate multiple sets of a question paper with shuffled questions and options, each with its own answer key.</p>
+      </header>
+
+      <details class="card practices">
+        <summary>How to write the Word document so that every question can be shuffled</summary>
+        <div class="practices__body">
+          <h3>Do this</h3>
+          <ol>
+            <li>
+              <strong>Let Word number the questions.</strong> Select the questions, then on the
+              <em>Home</em> tab click the numbering button and pick the <em>1. 2. 3.</em> style.
+              Do not type the numbers yourself &mdash; the tool needs Word&rsquo;s numbering to
+              renumber the shuffled paper.
+            </li>
+            <li>
+              <strong>Let Word letter the options too.</strong> Select the four options of a
+              question, click the numbering button and pick a style that shows
+              <em>(A) (B) (C) (D)</em>. This one habit makes the most difference: options
+              lettered by Word can always be shuffled.
+            </li>
+            <li>
+              <strong>If you prefer to type the letters,</strong> put the letter at the start of
+              the line and press the <strong>Tab</strong> key after it &mdash; never spaces.
+            </li>
+            <li>
+              <strong>Give every question exactly four options</strong> &mdash; A, B, C and D,
+              each used once. No fifth option, and no letter used twice.
+            </li>
+            <li>
+              <strong>Keep each option on one line.</strong> Do not press Enter in the middle of
+              an option.
+            </li>
+            <li>
+              <strong>If a question also has lettered statements</strong> (A. B. C. &hellip;),
+              keep the options in brackets &mdash; (A) (B) (C) &mdash; so the two lists can be
+              told apart.
+            </li>
+            <li>
+              <strong>Put the subject name on a line of its own,</strong> in capitals:
+              <strong>PHYSICS</strong>, <strong>CHEMISTRY</strong>, <strong>BIOLOGY</strong>.
+              Nothing else on that line. Questions are only shuffled within their own subject.
+            </li>
+            <li>
+              <strong>Number the questions straight through the paper</strong> (1 to 180). Do not
+              start again at 1 for each subject.
+            </li>
+            <li>
+              <strong>In the answer key table,</strong> put the question number in one box and the
+              plain letter in the next box &mdash; write <strong>A</strong>, not
+              <strong>(A)</strong>.
+            </li>
+          </ol>
+
+          <h3>Avoid this</h3>
+          <ol>
+            <li>
+              <strong>Options inside a table.</strong> Those cannot be shuffled. Put each option
+              on its own line instead. A table inside the <em>question</em> is perfectly fine.
+            </li>
+            <li>
+              <strong>A picture inside an option.</strong> The picture stays where it is on the
+              page, so the option cannot move. Keep pictures in the question text.
+            </li>
+            <li>
+              <strong>Options that point at other options</strong> &mdash; &ldquo;Both (A) and
+              (B)&rdquo;, &ldquo;None of these&rdquo;. Shuffling can change what they mean. If you
+              use them, type those question numbers into <em>Keep the option order of these
+              questions</em>.
+            </li>
+          </ol>
+
+          <p class="hint">
+            Nothing is ever guessed at. Anything that cannot be read with certainty is listed by
+            <em>Dry run</em> and left exactly as it was, with its answer letter unchanged.
+          </p>
+        </div>
+      </details>
+
+      <section class="card">
+        <h2>1 &middot; Question paper</h2>
+        <div class="field field--file">
+          <label for="source-file">Original paper (.docx)</label>
+          <div class="row">
+            <input id="source-file" type="text" placeholder="No file selected" readonly />
+            <button id="browse" type="button" class="button button--secondary">Browse&hellip;</button>
+          </div>
+          <p class="hint">Sets are written to a new <code>question-sets-NN</code> folder next to this file.</p>
+        </div>
+        <div id="paper-summary" class="summary" hidden></div>
+      </section>
+
+      <section class="card">
+        <h2>2 &middot; What to shuffle</h2>
+
+        <label class="toggle">
+          <input id="shuffle-questions" type="checkbox" checked />
+          <span>
+            <strong>Shuffle question order</strong>
+            <small>Questions move only inside their own subject.</small>
+          </span>
+        </label>
+
+        <div class="field field--nested">
+          <label for="question-exclusions">Keep these question numbers in place</label>
+          <input id="question-exclusions" type="text" inputmode="numeric" placeholder="e.g. 10, 11, 19, 20" />
+          <p class="hint">Comma separated. Ranges such as <code>10-14</code> also work.</p>
+        </div>
+
+        <label class="toggle">
+          <input id="shuffle-options" type="checkbox" checked />
+          <span>
+            <strong>Shuffle option order</strong>
+            <small>Option labels (A)&ndash;(D) stay put; only the answers move between them.</small>
+          </span>
+        </label>
+
+        <div class="field field--nested">
+          <label for="option-exclusions">Keep the option order of these questions</label>
+          <input id="option-exclusions" type="text" inputmode="numeric" placeholder="e.g. 1, 4, 8, 9" />
+          <p class="hint">Use this for &ldquo;None of these&rdquo;, &ldquo;Both (A) and (B)&rdquo; and similar questions.</p>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>3 &middot; Output</h2>
+        <div class="grid">
+          <div class="field">
+            <label for="set-count">Number of sets</label>
+            <input id="set-count" type="number" min="1" max="100" value="4" />
+          </div>
+          <div class="field">
+            <label for="seed">Seed <span class="muted">(optional)</span></label>
+            <input id="seed" type="text" placeholder="Leave blank for a new random shuffle" />
+            <p class="hint">Same seed + same settings = the same sets again.</p>
+          </div>
+        </div>
+      </section>
+
+      <div class="actions">
+        <button id="generate" type="button" class="button button--primary" disabled>Generate</button>
+        <button id="dry-run" type="button" class="button button--secondary" disabled>Dry run</button>
+        <span id="status" class="status" role="status"></span>
+      </div>
+
+      <section id="progress-panel" class="card progress-panel" hidden>
+        <div class="progress-line">
+          <strong id="progress-set">Preparing&hellip;</strong>
+          <span id="progress-overall-percent" class="muted">0%</span>
+        </div>
+        <div class="progress"><div id="progress-overall-bar"></div></div>
+        <div class="progress-line progress-line--sub">
+          <span id="progress-step">&nbsp;</span>
+          <span id="progress-step-percent" class="muted"></span>
+        </div>
+        <div class="progress progress--thin"><div id="progress-step-bar"></div></div>
+      </section>
+
+      <section id="dry-run-panel" class="card" hidden></section>
+
+      <section id="results" class="card card--results" hidden></section>
+    </main>
+
+    <script type="module" src="renderer.js"></script>
+  </body>
+</html>
