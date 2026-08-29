@@ -1,4 +1,9 @@
-import { OPTION_LETTERS, type OptionLetter, type SkipReason } from '../../shared/types';
+import {
+  OPTION_LETTERS,
+  type OptionLayoutNote,
+  type OptionLetter,
+  type SkipReason,
+} from '../../shared/types';
 import type { Element } from '../docx/dom';
 import { NS, isElement, visibleText } from '../docx/xml';
 import type { NumberingIndex } from '../parse/NumberingIndex';
@@ -28,7 +33,7 @@ export interface OptionBlock {
 }
 
 export type OptionParseResult =
-  | { readonly ok: true; readonly block: OptionBlock }
+  | { readonly ok: true; readonly block: OptionBlock; readonly notes: readonly OptionLayoutNote[] }
   | { readonly ok: false; readonly reason: SkipReason; readonly detail: string };
 
 /**
@@ -45,6 +50,10 @@ interface LabelHit {
   readonly letter: OptionLetter;
   readonly start: number;
   readonly end: number;
+  /** The label as typed: `(A)` upper case, `(a)` lower case. */
+  readonly upperCase: boolean;
+  /** True when the label starts a paragraph or follows a tab - the unambiguous case. */
+  readonly afterTab: boolean;
 }
 
 /** How hard the parser is allowed to look for labels, from safest to most permissive. */
@@ -140,6 +149,53 @@ export class OptionBlockParser {
     return narrowed.length === 1 ? narrowed[0]!.index : undefined;
   }
 
+  /**
+   * Describes what was odd about a layout the parser nevertheless managed to read.
+   *
+   * Derived from the labels themselves rather than from which pass matched, so the note
+   * says what is actually wrong with the document: a paper written entirely in lower case
+   * `(a)...(d)` is consistent and gets no note, even though it needs a later pass.
+   */
+  private notesFor(found: readonly LabelHit[], letteredFirstParagraph: number | undefined): OptionLayoutNote[] {
+    const notes: OptionLayoutNote[] = [];
+
+    if (letteredFirstParagraph !== undefined) {
+      notes.push({
+        issue: 'mixed-auto-and-typed-labels',
+        detail:
+          'Option (A) is lettered by Word, but ' +
+          found.map((hit) => `(${hit.letter})`).join(', ') +
+          ' are typed into the text.',
+        fix: 'Letter all four options the same way: either let Word letter all four, or type all four labels.',
+      });
+    }
+
+    const noTab = found.filter((hit) => !hit.afterTab);
+    if (noTab.length > 0) {
+      notes.push({
+        issue: 'label-not-after-tab',
+        detail:
+          `No tab in front of ${noTab.length === 1 ? 'label' : 'labels'} ` +
+          `${noTab.map((hit) => `(${hit.letter})`).join(', ')}, so ${noTab.length === 1 ? 'it was' : 'they were'} ` +
+          'read from the punctuation before it instead.',
+        fix: 'Press Tab before each option label, so the label always follows a tab.',
+      });
+    }
+
+    if (found.length > 1 && found.some((hit) => hit.upperCase !== found[0]!.upperCase)) {
+      notes.push({
+        issue: 'mixed-label-case',
+        detail:
+          'The labels mix upper and lower case: ' +
+          found.map((hit) => `(${hit.upperCase ? hit.letter : hit.letter.toLowerCase()})`).join(' ') +
+          '.',
+        fix: 'Use the same case for all four labels - (A) (B) (C) (D).',
+      });
+    }
+
+    return notes;
+  }
+
   /** Turns a set of labels (plus an optional Word-lettered option A) into option slots. */
   private build(
     paragraphs: readonly Element[],
@@ -214,6 +270,7 @@ export class OptionBlockParser {
     return {
       ok: true,
       block: { paragraphs: paragraphAtoms, prefixAtoms: flat.slice(0, labelRanges[0]!.from), slots },
+      notes: this.notesFor(found, letteredFirstParagraph),
     };
   }
 
@@ -264,9 +321,17 @@ function findLabels(paragraphAtoms: readonly ParagraphAtoms[], pass: SearchPass)
     pass.pattern.lastIndex = 0;
     let match: RegExpExecArray | null;
     while ((match = pass.pattern.exec(text)) !== null) {
-      const letter = (match[1] ?? match[2] ?? '').toUpperCase() as OptionLetter;
+      const raw = match[1] ?? match[2] ?? '';
+      const letter = raw.toUpperCase() as OptionLetter;
       if (!isLabelPosition(text, match.index, pass.relaxed)) continue;
-      found.push({ paragraphIndex, letter, start: match.index, end: match.index + match[0].length });
+      found.push({
+        paragraphIndex,
+        letter,
+        start: match.index,
+        end: match.index + match[0].length,
+        upperCase: raw === letter,
+        afterTab: isLabelPosition(text, match.index, false),
+      });
     }
   });
   return found;

@@ -8,9 +8,11 @@ import type {
   GenerationResult,
   PaperSummary,
   ProgressEvent,
+  QuestionLayoutNote,
   SkippedOptionShuffle,
   SubjectSummary,
 } from '../../shared/types';
+import { groupLayoutNotes } from '../../shared/layoutNotes';
 import { DocxPackage } from '../docx/DocxPackage';
 import type { IOptionSetParser } from '../options/OptionSet';
 import { OptionSetParser } from '../options/OptionSetParser';
@@ -147,6 +149,10 @@ export class GenerationService {
       return numbers;
     });
 
+    // Opt-out rather than opt-in: an unsplit question is the sane default for a printed
+    // paper, and older callers (the CLI, saved settings) omit the flag entirely.
+    const keepQuestionsWhole = request.keepQuestionsWhole !== false;
+
     onProgress({ stage: 'planning', message: 'Planning the sets...', fraction: 0 });
     // Resolved here (not inside the planner) so the exact seed can be reported back.
     const runSeed = resolveSeed(request.seed);
@@ -177,6 +183,7 @@ export class GenerationService {
         plan,
         originalAnswers: facts.answers,
         setLabel: setLabel(plan.setNumber),
+        keepQuestionsWhole,
         onStep: (fraction, message) =>
           emit(fraction < 0.55 ? 'options' : fraction < 0.95 ? 'ordering' : 'packaging', plan.setNumber, fraction * BUILD_SHARE, message),
       });
@@ -197,6 +204,7 @@ export class GenerationService {
         seed: plan.seed,
         questionsMoved: built.questionsMoved,
         optionsShuffled: built.optionsShuffled,
+        questionsKeptWhole: built.questionsKeptWhole,
         skipped: [...summary.unshufflableOptions, ...built.skipped],
         mappings: built.mappings,
         verification,
@@ -259,10 +267,16 @@ export class GenerationService {
     });
 
     const unshufflableOptions: SkippedOptionShuffle[] = [];
+    const layoutNotes: QuestionLayoutNote[] = [];
     for (const section of paper.sections) {
       for (const block of section.blocks) {
         const parsed = optionParser.parse(block);
-        if (parsed.ok) continue;
+        if (parsed.ok) {
+          for (const note of parsed.notes) {
+            layoutNotes.push({ questionNumber: block.printedNumber, subject: section.subject, ...note });
+          }
+          continue;
+        }
         unshufflableOptions.push({
           questionNumber: block.printedNumber,
           subject: section.subject,
@@ -278,6 +292,8 @@ export class GenerationService {
       subjects,
       unshufflableOptions,
       advisories: this.advisor.advise(paper),
+      layoutNotes,
+      layoutNoteGroups: groupLayoutNotes(layoutNotes),
     };
   }
 }

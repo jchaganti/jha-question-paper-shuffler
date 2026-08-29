@@ -158,6 +158,11 @@ code {
   cursor: pointer;
 }
 
+/* A toggle that follows a field grid rather than another toggle. */
+.toggle--spaced {
+  margin-top: 18px;
+}
+
 .toggle input {
   margin: 2px 0 0;
   width: 16px;
@@ -435,4 +440,18 @@ details ul {
 details ul li {
   margin-bottom: 4px;
   color: var(--muted);
+}
+
+/* One entry per option-layout problem: heading, question numbers, then the fix. */
+.notes-list li {
+  color: var(--text);
+  margin-bottom: 12px;
+}
+
+.notes-list li:last-child {
+  margin-bottom: 0;
+}
+
+.notes-list .hint {
+  margin-top: 2px;
 }

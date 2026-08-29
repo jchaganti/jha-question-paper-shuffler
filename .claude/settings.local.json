@@ -36,7 +36,10 @@
       "Bash(node -e ' *)",
       "PowerShell($sp=\"C:\\\\Users\\\\JCHAGA~1\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\C--ps-jha\\\\08bc0a20-8a3d-46cc-8acd-91a2b3d0cee4\\\\scratchpad\"; $files=@\\(\"$sp\\\\batch\\\\question-sets-01\\\\ANIMAL KINGDOM-\\(TEST-1\\) XI-2027_4934_15-07-2026 \\(XI-2024_3642\\)-AM final corr after test_ - Set 01.docx\",\"$sp\\\\batch\\\\question-sets-04\\\\MTP-2-PCB-XI-2027_4964_02.08.26_Unbold_Group D - Set 02.docx\"\\); $word=New-Object -ComObject Word.Application; $word.Visible=$false; $word.DisplayAlerts=0; foreach\\($f in $files\\){ try { $doc=$word.Documents.Open\\($f,$false,$true\\); Write-Output \"$\\(Split-Path $f -Leaf\\): pages=$\\($doc.ComputeStatistics\\(2\\)\\) words=$\\($doc.ComputeStatistics\\(0\\)\\)\"; $doc.Close\\(0\\) } catch { Write-Output \"ERROR on $f : $\\($_.Exception.Message\\)\" } }; $word.Quit\\(\\); [System.Runtime.InteropServices.Marshal]::ReleaseComObject\\($word\\) | Out-Null)",
       "Bash(node scripts/ui-harness.mjs)",
-      "Bash(python -)"
+      "Bash(python -)",
+      "PowerShell(npm test 2>&1)",
+      "PowerShell(npm run build 2>&1)",
+      "Bash(ls \"/c/ps/q-paper/\" 2>&1 | head -20)"
     ]
   }
 }

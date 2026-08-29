@@ -32,8 +32,10 @@ export interface FixtureQuestion {
    * `'plain'` uses a "%1." list, the shape papers use for lettered *statements*.
    */
   readonly autoLettered?: boolean | 'plain';
-  /** Extra paragraphs before the options, auto-lettered with a second "(%1)" list. */
+  /** Extra paragraphs before the options, auto-lettered with a second lettered list. */
   readonly secondLetteredList?: readonly string[];
+  /** Which list letters `secondLetteredList`. Defaults to a second "(%1)" list. */
+  readonly secondLetteredListId?: string;
   /**
    * Emit only the *first* option paragraph as an auto-lettered list item, leaving the rest
    * as typed labels - the "(A) is lettered by Word, (B)(C)(D) are typed" shape.
@@ -105,7 +107,21 @@ function answerKeyTable(entries: readonly { number: number; answer: string }[], 
   return `<w:tbl><w:tblPr><w:tblW w:w="5000" w:type="pct"/></w:tblPr>${grid}${rows.join('')}</w:tbl>`;
 }
 
-export function buildDocumentXml(sections: readonly FixtureSection[]): string {
+export interface FixtureOptions {
+  /**
+   * Leave out the "ANSWER KEY" heading, so the key is found only by recognising the table.
+   * Papers written this way are supported and are the case where the page break before the
+   * key has to go on the table rather than on a heading paragraph.
+   */
+  readonly omitAnswerKeyHeading?: boolean;
+  /** Raw XML inserted immediately before the answer key, e.g. a typed page break. */
+  readonly beforeAnswerKey?: string;
+}
+
+export function buildDocumentXml(
+  sections: readonly FixtureSection[],
+  options: FixtureOptions = {},
+): string {
   const body: string[] = [];
   const key: { number: number; answer: string }[] = [];
 
@@ -115,7 +131,7 @@ export function buildDocumentXml(sections: readonly FixtureSection[]): string {
     section.questions.forEach((question, index) => {
       body.push(paragraph(question.stem, section.numId));
       for (const extra of question.secondLetteredList ?? []) {
-        body.push(paragraph(extra, LIST.secondBracketed));
+        body.push(paragraph(extra, question.secondLetteredListId ?? LIST.secondBracketed));
       }
       const optionListId =
         question.autoLettered === true
@@ -138,8 +154,11 @@ export function buildDocumentXml(sections: readonly FixtureSection[]): string {
     body.push('<w:p/>', '<w:p/>', '<w:p/>');
   }
 
-  body.push(plainParagraph('ANSWER KEY'));
-  body.push(plainParagraph('MODEL TEST PAPER'));
+  if (options.beforeAnswerKey) body.push(options.beforeAnswerKey);
+  if (!options.omitAnswerKeyHeading) {
+    body.push(plainParagraph('ANSWER KEY'));
+    body.push(plainParagraph('MODEL TEST PAPER'));
+  }
   body.push(answerKeyTable(key.sort((a, b) => a.number - b.number), 2));
   body.push('<w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>');
 
@@ -174,7 +193,10 @@ function buildNumberingXml(sections: readonly FixtureSection[]): string {
   return `${PROLOG}<w:numbering ${NAMESPACES}>${abstracts.join('')}${nums.join('')}</w:numbering>`;
 }
 
-export async function buildPaper(sections: readonly FixtureSection[]): Promise<Buffer> {
+export async function buildPaper(
+  sections: readonly FixtureSection[],
+  options: FixtureOptions = {},
+): Promise<Buffer> {
   const zip = new JSZip();
   zip.file(
     '[Content_Types].xml',
@@ -199,7 +221,7 @@ export async function buildPaper(sections: readonly FixtureSection[]): Promise<B
       '<Relationship Id="rId102" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject" Target="embeddings/oleObject2.bin"/>' +
       '</Relationships>',
   );
-  zip.file('word/document.xml', buildDocumentXml(sections));
+  zip.file('word/document.xml', buildDocumentXml(sections, options));
   zip.file('word/numbering.xml', buildNumberingXml(sections));
   zip.file('word/embeddings/oleObject1.bin', 'not-a-real-ole');
   zip.file('word/embeddings/oleObject2.bin', 'not-a-real-ole');

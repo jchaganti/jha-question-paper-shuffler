@@ -37,6 +37,9 @@ points at it whenever it has to skip a question.
   broken down per subject;
 - every question whose options *cannot* be shuffled with certainty, and why (these keep
   their original option order and their answer letter never changes);
+- every question that **is** shuffled but whose option labels had to be worked out from an
+  inconsistent layout — see [Shuffled, but worth correcting](#shuffled-but-worth-correcting)
+  below;
 - every question whose option order looks position-dependent — "None of these",
   "Both (A) and (B)", assertion-reason sets — with a one-click **Add these N to "keep the
   option order"** button;
@@ -109,6 +112,7 @@ npm run cli -- --file "C:\papers\MTP-2.docx" --sets 4 --shuffle-questions --shuf
 | Keep the option order of these questions | Comma separated printed question numbers whose options must not move. Use it for "None of these", "Both (A) and (B)", assertion-reason sets, or any question where option order carries meaning. |
 | Number of sets | 1–100. |
 | Seed | Optional — see below. Leave it blank for a normal run. |
+| Keep each question on one page | On by default. A question that no longer fits at the bottom of a page starts on the next page instead of being split across two. See below. |
 
 Exclusion lists always use the **printed question numbers of the original paper**
 (1…180 for the sample papers), not per-subject numbering.
@@ -143,6 +147,88 @@ A seed is not a secret or a password — anyone with the seed and the original p
 reproduce the sets. The report already contains the full answer mapping, so keep the whole
 `question-sets-NN` folder as confidential as the paper itself.
 
+### Shuffled, but worth correcting
+
+Several option layouts are readable only because the parser has a fallback for them. Those
+questions are shuffled normally and their answer letters are correct — but a fallback is a
+*reading* of an ambiguous document, not a certainty, so the dry run lists them for whoever
+types the paper. They used to be reported as skips; now that they succeed they are still
+reported, grouped by problem with the fix stated once:
+
+| Reported as | What it means | Fix in Word |
+| --- | --- | --- |
+| Some options are lettered by Word and the rest typed by hand | Option (A) is an automatically lettered list item; (B), (C), (D) are typed. | Letter all four the same way — all by Word, or all typed. |
+| An option label has no tab in front of it | `…(i), (iv) and (v) (D) …` — the tab before `(D)` is missing, so the label was read from the punctuation in front of it. | Press Tab before each option label. |
+| The four option labels mix capital and small letters | `(A) (b) (C) (d)`. | Use one case for all four. |
+| More than one lettered list could have been the options | A question has two four-item lettered lists; the bracketed one was taken as the options. | Letter only the options `(A) (B) (C) (D)`; give other lists a different style, such as `A.` or `(i) (ii)`. |
+
+Counts on the sample papers, out of 180 questions (100 for Animal Kingdom):
+
+| Paper | Options not shuffled | Shuffled, worth correcting |
+| --- | --- | --- |
+| Group A | 6 | 4 |
+| Group B | 8 | 2 |
+| Group C | 9 | 3 |
+| Group D | 6 | 4 |
+| Animal Kingdom | 5 | 5 |
+
+A question is reported whatever the settings say — the document is worth fixing even when
+that question is in the "keep the option order" list. The same grouping goes into
+`_generation-report.md` and into `--dry-run` / `--inspect` on the command line.
+
+### Keep each question on one page
+
+Shuffling moves questions of different heights into new positions, so a question that sat
+comfortably on one page in the original can end up straddling a page break — stem at the
+bottom of page 4, options at the top of page 5. With this option on (the default) that
+cannot happen: a question that no longer fits moves down as a whole and starts at the top
+of the next page.
+
+Nothing is measured — where the page breaks fall is Word's decision, made from font
+metrics and image sizes at layout time. Instead each question is marked with the two flags
+Word itself provides for this (`w:keepNext` between its paragraphs, `w:keepLines` inside
+each one, and `w:cantSplit` on the rows of any table inside the question), and Word does
+the rest when it lays the paper out.
+
+Measured on the sample papers, one set each, same seed with the option off and on:
+
+| Paper | Questions split across two pages | Pages |
+| --- | --- | --- |
+| Group A, option off | 13 | 30 |
+| Group A, option on | **0** | 32 |
+| Group C, option off | 20 | 30 |
+| Group C, option on | **0** | 32 |
+| Animal Kingdom, option off | 18 | 26 |
+| Animal Kingdom, option on | **0** | 30 |
+
+So the cost is a few extra pages, which is why it is a checkbox rather than a fixed rule.
+Two limits, both deliberate:
+
+- A question taller than a page cannot be kept together. Word ignores the request in that
+  case and breaks the question as it would have anyway — nothing is ever lost.
+- Blank paragraphs that trail a question are treated as spacing, not content, and stay out
+  of the chain. The page break is free to fall in that gap, which keeps the page count from
+  growing more than it must.
+
+Turn it off with `--allow-page-splits` on the command line.
+
+### The answer key starts a new page
+
+Always, and with no setting to turn it off — an answer key printed under the last question
+is too easy to hand out with the paper.
+
+Papers push the key onto its own page with a run of blank paragraphs, which works for the
+original but not after shuffling: the text reflows, and blank paragraphs are only worth
+whatever space is left on the page. Group C has no blank paragraphs at all before its key,
+so its generated sets ran the key on straight after the last option. The generated paper
+therefore states the intent — `w:pageBreakBefore` on the "ANSWER KEY" heading (or, in a
+paper that has no such heading, on the first paragraph inside the key table).
+
+If a break is already there — a typed page break, a next-page section break, or the
+property itself — nothing is added, so no paper gains a blank page. Measured on three
+Group C sets: the key moved from sharing page 30/31 with the last question to starting page
+31/32, and Word reports no page without text in either version.
+
 ## Outputs
 
 Written next to the source paper, in a new folder:
@@ -163,7 +249,9 @@ Each generated paper:
   appended to the answer-key title (`MODEL TEST PAPER-2 (A)  –  SET 01`);
 - keeps every embedded MathType/OLE equation, image, table, style, header and footer
   from the source, because the tool edits `word/document.xml` and copies every other part
-  of the package byte-for-byte.
+  of the package byte-for-byte;
+- keeps every question whole on one page (see below);
+- starts the answer key on a page of its own (see below).
 
 `_generation-report.md` records, per run: the run seed, the paper structure, the questions
 whose options could not be shuffled (and why), the questions worth excluding, the
@@ -183,6 +271,8 @@ DocxPackage        read/write the .docx zip; only word/document.xml is modified
     AutoLetteredOptionParser one option per Word-numbered paragraph
   ShufflePlanner   pure plan: question order per subject + option permutation per question
   SetBuilder       applies a plan: swap option contents, re-order blocks, rewrite the key
+  PageFlowGuard    marks each question so a page break cannot cut it in half, and puts
+                   the answer key on a page of its own
   SetVerifier      re-opens the written file and proves it is correct
 GenerationService  inspect / dryRun / generate; used by both the UI and the CLI
 ```
@@ -302,6 +392,10 @@ clear error message when they do not hold.
    report. This happens for options laid out inside a table, options that continue onto
    another paragraph, options that anchor a floating picture (moving the run would leave
    the picture behind), and questions where two lettered lists could equally be the options.
+   Where a fallback in assumption 6 or 7 *did* make the options readable, the question is
+   shuffled but still reported — see
+   [Shuffled, but worth correcting](#shuffled-but-worth-correcting). Nothing the tool works
+   out from an inconsistent layout stays invisible.
 10. **Semantics are the user's call.** The tool never decides that an option "should not"
    move; it flags questions whose option text looks position-dependent ("None of these",
    "Both (A) and (B)", assertion-reason sets) and the UI offers to add them to the
@@ -309,6 +403,11 @@ clear error message when they do not hold.
 11. **Every set differs** from the original paper and from the other sets in the same run
     (checked over 50 attempts), and no question keeps its original four options in the same
     order unless it was excluded or unshufflable.
+12. **Page breaks are Word's to place, not the tool's.** "Keep each question on one page"
+    adds `w:keepNext` / `w:keepLines` / `w:cantSplit` and lets Word lay the paper out; the
+    tool never measures a page and never moves content to make one fit. The single break it
+    does ask for is `w:pageBreakBefore` on the answer key, and only when no break is there
+    already. Flags in the source document are left alone.
 
 ## Will it work on my paper?
 
@@ -326,10 +425,11 @@ That is the answer for a specific paper. In general:
 | Stem spread over several paragraphs, match-the-columns tables, diagrams | Supported - they travel with the question. |
 | No subject headings (or headings the tool does not recognise) | Treated as **one** subject, so shuffling spans the whole paper. Visible in the summary panel as a single `ALL` row - check it. |
 | Options auto-lettered by Word (one option per list paragraph, no typed "(A)") | Supported. |
-| Option (A) lettered by Word, with (B), (C), (D) typed | Supported. |
-| A missing tab before a label (`…and (v) (D) …`) | Supported. |
+| Option (A) lettered by Word, with (B), (C), (D) typed | Supported, and **reported** as worth correcting. |
+| A missing tab before a label (`…and (v) (D) …`) | Supported, and **reported** as worth correcting. |
+| Labels mixing case (`(A) (b) (C) (d)`) | Supported, and **reported** as worth correcting. |
 | Item list `(a)…(d)` above the answer options `(A)…(D)` | Supported — the upper-case run is the options. |
-| A lettered statement list ("A. …") next to the option list ("(A) …") | Supported — the bracketed list is the options. |
+| A lettered statement list ("A. …") next to the option list ("(A) …") | Supported — the bracketed list is the options — and **reported** as worth correcting. |
 | Two lists that could equally be the options | Question keeps its option order and is listed in the report. |
 | Options laid out inside a table, or a mix of one auto-lettered option and typed labels | Question keeps its option order and is listed in the report. |
 | 3 or 5 options, options continuing onto another paragraph, an option anchoring a floating picture | Question keeps its option order and is listed in the report. |
@@ -367,11 +467,12 @@ your paper, the parse is right.
 
 ```
 src/shared/types.ts        contracts shared by UI, main process and CLI
+src/shared/layoutNotes.ts  grouping of option-layout notes for display
 src/core/docx/             .docx package + XML helpers
 src/core/parse/            numbering, paper structure, answer key
 src/core/options/          the two option layouts, atoms, applying a permutation
 src/core/shuffle/          seeded RNG and the pure shuffle planner
-src/core/generate/         set builder, output folder, report, orchestration
+src/core/generate/         set builder, page flow, output folder, report, orchestration
 src/core/verify/           post-generation verification
 src/main/                  Electron main process + preload bridge
 src/renderer/              UI (HTML/CSS/TS, no framework)

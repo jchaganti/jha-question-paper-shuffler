@@ -30,7 +30,7 @@ export class OptionSetParser implements IOptionSetParser {
   parse(block: QuestionBlock): OptionSetResult {
     const typed = this.typedLabels.parse(block);
     if (typed.ok) {
-      return { ok: true, options: new TypedLabelOptionSet(typed.block, this.applier) };
+      return { ok: true, options: new TypedLabelOptionSet(typed.block, this.applier), notes: typed.notes };
     }
 
     const auto = this.autoLettered.parse(block);

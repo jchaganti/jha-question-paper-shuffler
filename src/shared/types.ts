@@ -30,6 +30,14 @@ export interface GenerationRequest {
   /** Number of sets to generate (>= 1). */
   readonly setCount: number;
   /**
+   * Keep each question whole on one page: a question that would not fit at the bottom of
+   * a page starts on the next page instead of being split across two.
+   *
+   * Defaults to `true` when omitted. Turning it off leaves the page flow of the original
+   * paper untouched, which keeps the page count down at the cost of split questions.
+   */
+  readonly keepQuestionsWhole?: boolean;
+  /**
    * Optional seed. When supplied, the same seed + same inputs always produce
    * byte-identical sets, which makes a run reproducible and auditable.
    */
@@ -56,6 +64,53 @@ export interface SkippedOptionShuffle {
   readonly detail: string;
 }
 
+/**
+ * Something about the way a question's options are labelled that the tool could work out,
+ * but that the Word document should not have contained.
+ *
+ * These questions **are** shuffled - the parser has a fallback for each of them. They are
+ * reported so that whoever types the paper can correct it, because a fallback is a reading
+ * of an ambiguous document rather than a certainty.
+ */
+export type OptionLayoutIssue =
+  /** Option (A) is lettered by Word while (B), (C) and (D) are typed by hand. */
+  | 'mixed-auto-and-typed-labels'
+  /** A label had no tab in front of it, so it was read from the punctuation before it. */
+  | 'label-not-after-tab'
+  /** The four labels do not all use the same case, e.g. "(A) (b) (C) (d)". */
+  | 'mixed-label-case'
+  /** Several lettered lists could have been the options; the likeliest one was used. */
+  | 'several-lettered-lists';
+
+export interface OptionLayoutNote {
+  readonly issue: OptionLayoutIssue;
+  readonly detail: string;
+  /** What to change in the Word document, in the author's terms. */
+  readonly fix: string;
+}
+
+/** An `OptionLayoutNote` together with the question it came from. */
+export interface QuestionLayoutNote extends OptionLayoutNote {
+  readonly questionNumber: number;
+  readonly subject: string;
+}
+
+/**
+ * Layout notes gathered by problem, ready to display: an author fixing a paper wants
+ * "these eight questions have the same problem, here is the fix", not the same sentence
+ * repeated eight times. Grouped in the main process so that the UI, the CLI and the
+ * report all show the same thing (see `shared/layoutNotes.ts`).
+ */
+export interface LayoutNoteGroup {
+  readonly issue: OptionLayoutIssue;
+  /** Plain-language heading for someone who only types the paper. */
+  readonly label: string;
+  /** What to change in the Word document. */
+  readonly fix: string;
+  /** Affected question numbers, ascending and without repeats. */
+  readonly questionNumbers: readonly number[];
+}
+
 /** An advisory: the option text looks position-dependent, so shuffling may change meaning. */
 export interface OptionAdvisory {
   readonly questionNumber: number;
@@ -80,6 +135,13 @@ export interface PaperSummary {
   readonly unshufflableOptions: readonly SkippedOptionShuffle[];
   /** Questions worth adding to the "options not shuffled" exclusion list. */
   readonly advisories: readonly OptionAdvisory[];
+  /**
+   * Questions whose options *were* read and will be shuffled, but only because the parser
+   * fell back on a heuristic. Reported so the Word document can be corrected.
+   */
+  readonly layoutNotes: readonly QuestionLayoutNote[];
+  /** The same notes gathered by problem, for display. Empty when `layoutNotes` is. */
+  readonly layoutNoteGroups: readonly LayoutNoteGroup[];
 }
 
 /** Per subject, what a dry run expects to happen with the current settings. */
@@ -136,6 +198,8 @@ export interface GeneratedSet {
   readonly seed: string;
   readonly questionsMoved: number;
   readonly optionsShuffled: number;
+  /** Questions marked to stay whole on one page; 0 when that option was switched off. */
+  readonly questionsKeptWhole: number;
   readonly skipped: readonly SkippedOptionShuffle[];
   readonly mappings: readonly QuestionMapping[];
   readonly verification: VerificationResult;

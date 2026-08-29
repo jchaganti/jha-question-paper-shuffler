@@ -12,6 +12,7 @@ import {
   visibleText,
 } from '../docx/xml';
 import { OptionSetParser } from '../options/OptionSetParser';
+import { PageFlowGuard } from './PageFlow';
 import { NumberingIndex } from '../parse/NumberingIndex';
 import { PaperParser } from '../parse/PaperParser';
 import type { ParsedPaper } from '../parse/PaperModel';
@@ -29,6 +30,8 @@ export interface BuildSetInput {
   readonly originalAnswers: ReadonlyMap<number, OptionLetter>;
   /** Text appended to the answer-key title, e.g. "SET 01". Empty to disable. */
   readonly setLabel: string;
+  /** Mark every question so that it is never split over a page break. */
+  readonly keepQuestionsWhole: boolean;
   readonly onStep?: BuildStepListener;
 }
 
@@ -50,6 +53,8 @@ export interface BuiltSet {
   readonly questionsMoved: number;
   readonly optionsShuffled: number;
   readonly skipped: SkippedOptionShuffle[];
+  /** Questions marked to stay whole on one page; 0 when that was switched off. */
+  readonly questionsKeptWhole: number;
 }
 
 /**
@@ -60,7 +65,10 @@ export interface BuiltSet {
  * contents are swapped between labels, and the existing answer-key cells are rewritten.
  */
 export class SetBuilder {
-  constructor(private readonly parser: PaperParser = new PaperParser()) {}
+  constructor(
+    private readonly parser: PaperParser = new PaperParser(),
+    private readonly pageFlow: PageFlowGuard = new PageFlowGuard(),
+  ) {}
 
   async build(input: BuildSetInput): Promise<BuiltSet> {
     const report = input.onStep ?? ((): void => {});
@@ -144,13 +152,21 @@ export class SetBuilder {
     replaceChildren(paper.body, newBodyNodes);
     report(STEP.ordered, 'Re-ordering questions and updating the answer key');
 
-    // 3. Stamp the set label onto the answer-key title line.
+    // 3. Page flow: a question that no longer fits at the bottom of a page starts on the
+    //    next one. Applied after re-ordering, because shuffling changes which question
+    //    lands where and so which ones would have been cut in half.
+    const questionsKeptWhole = input.keepQuestionsWhole ? this.pageFlow.keepQuestionsWhole(paper) : 0;
+    // The answer key always opens a page of its own: a key printed under the last question
+    // is easy to hand out by mistake. Not optional, and independent of the setting above.
+    this.pageFlow.answerKeyOnNewPage(paper);
+
+    // 4. Stamp the set label onto the answer-key title line.
     if (input.setLabel) stampSetLabel(paper, input.setLabel);
 
     pkg.setPartText('word/document.xml', part.serialize());
     const buffer = await pkg.toBuffer();
     report(STEP.packaged, 'Packaging the document');
-    return { buffer, mappings, questionsMoved, optionsShuffled, skipped };
+    return { buffer, mappings, questionsMoved, optionsShuffled, skipped, questionsKeptWhole };
   }
 }
 

@@ -30,6 +30,7 @@ const questionExclusions = el<HTMLInputElement>('question-exclusions');
 const optionExclusions = el<HTMLInputElement>('option-exclusions');
 const setCount = el<HTMLInputElement>('set-count');
 const seed = el<HTMLInputElement>('seed');
+const keepQuestionsWhole = el<HTMLInputElement>('keep-questions-whole');
 const generateButton = el<HTMLButtonElement>('generate');
 const dryRunButton = el<HTMLButtonElement>('dry-run');
 const statusLabel = el<HTMLElement>('status');
@@ -87,6 +88,7 @@ function currentRequest(): GenerationRequest {
     optionExclusions: parseNumbers(optionExclusions.value),
     setCount: Number(setCount.value),
     seed: seed.value.trim() || undefined,
+    keepQuestionsWhole: keepQuestionsWhole.checked,
   };
 }
 
@@ -119,6 +121,47 @@ function renderSummary(paper: PaperSummary): void {
 }
 
 // --- dry run --------------------------------------------------------------------------
+
+/**
+ * Questions that *are* shuffled, but whose option labels had to be worked out from an
+ * inconsistent layout. Nothing to do before generating - this is for whoever types the
+ * next paper, so it is grouped by problem with the fix stated once.
+ *
+ * The grouping arrives ready-made from the main process (`PaperSummary.layoutNoteGroups`),
+ * so the UI and the CLI cannot drift apart.
+ */
+function renderLayoutNotes(paper: PaperSummary): void {
+  const groups = paper.layoutNoteGroups;
+  if (groups.length === 0) return;
+
+  // A question can carry more than one note, so count questions, not notes.
+  const affected = new Set(paper.layoutNotes.map((note) => note.questionNumber)).size;
+  const details = document.createElement('details');
+  details.append(
+    element('summary', '', `${affected} question(s) shuffled, but worth correcting in the Word document`),
+    element(
+      'p',
+      'hint',
+      'These are shuffled normally and their answer letters are correct. The tool worked the ' +
+        'option labels out from a layout that was not consistent — it can, but it should not ' +
+        'have to. Tidying them up in Word removes any doubt for the next paper.',
+    ),
+  );
+
+  const list = document.createElement('ul');
+  list.className = 'notes-list';
+  for (const group of groups) {
+    const item = document.createElement('li');
+    item.append(
+      element('strong', '', group.label),
+      element('div', '', `Questions: ${group.questionNumbers.join(', ')}`),
+      element('div', 'hint', `Fix: ${group.fix}`),
+    );
+    list.append(item);
+  }
+  details.append(list);
+  dryRunPanel.append(details);
+}
 
 function renderDryRun(report: DryRunReport): void {
   dryRunPanel.hidden = false;
@@ -177,6 +220,8 @@ function renderDryRun(report: DryRunReport): void {
     details.append(list);
     dryRunPanel.append(details);
   }
+
+  renderLayoutNotes(report.paper);
 
   if (report.optionsKeptByUser.length > 0) {
     dryRunPanel.append(

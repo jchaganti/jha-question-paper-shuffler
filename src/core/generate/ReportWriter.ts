@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { questionsWithLayoutNotes } from '../../shared/layoutNotes';
 import type { GenerationRequest, GenerationResult } from '../../shared/types';
 
 export const REPORT_FILE_NAME = '_generation-report.md';
@@ -35,6 +36,9 @@ export class ReportWriter {
     lines.push(`- Shuffle options: ${request.shuffleOptions ? 'yes' : 'no'}`);
     lines.push(`- Questions excluded from re-ordering: ${format(request.questionExclusions)}`);
     lines.push(`- Questions whose options were kept: ${format(request.optionExclusions)}`);
+    lines.push(
+      `- Keep each question on one page: ${request.keepQuestionsWhole === false ? 'no' : 'yes'}`,
+    );
     lines.push('');
 
     lines.push('## Paper structure', '');
@@ -54,6 +58,23 @@ export class ReportWriter {
       lines.push('| --- | --- | --- |');
       for (const item of paper.unshufflableOptions) {
         lines.push(`| ${item.questionNumber} | ${item.subject} | ${item.reason}: ${item.detail} |`);
+      }
+      lines.push('');
+    }
+
+    const layoutGroups = paper.layoutNoteGroups;
+    if (layoutGroups.length > 0) {
+      lines.push('## Shuffled, but worth correcting in the Word document', '');
+      lines.push(
+        `${questionsWithLayoutNotes(paper.layoutNotes).length} question(s) were shuffled normally, ` +
+          'but their option labels had to be worked out from an inconsistent layout. Correcting the ' +
+          'source paper removes the guesswork next time.',
+        '',
+      );
+      lines.push('| Problem | Questions | Fix |');
+      lines.push('| --- | --- | --- |');
+      for (const group of layoutGroups) {
+        lines.push(`| ${group.label} | ${group.questionNumbers.join(', ')} | ${group.fix} |`);
       }
       lines.push('');
     }
@@ -79,6 +100,9 @@ export class ReportWriter {
       lines.push(`- Seed used for this set: \`${set.seed}\` (derived from the run seed)`);
       lines.push(`- Questions moved: ${set.questionsMoved}`);
       lines.push(`- Questions with shuffled options: ${set.optionsShuffled}`);
+      if (set.questionsKeptWhole > 0) {
+        lines.push(`- Questions marked to stay whole on one page: ${set.questionsKeptWhole}`);
+      }
       lines.push(`- Verification: ${set.verification.ok ? 'PASSED' : 'FAILED'}`);
       for (const check of set.verification.checks) {
         lines.push(`  - ${check.ok ? 'ok' : 'FAILED'} - ${check.name} (${check.detail})`);

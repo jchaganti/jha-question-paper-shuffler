@@ -20,6 +20,8 @@ if (/^\s*import\s/m.test(renderer)) {
 
 const advisory = (questionNumber, subject, kind, detail) => ({ questionNumber, subject, kind, detail });
 const skip = (questionNumber, subject, reason, detail) => ({ questionNumber, subject, reason, detail });
+// Detail/fix text is only shown grouped, so the per-question note keeps a stub of each.
+const note = (questionNumber, subject, issue) => ({ questionNumber, subject, issue, detail: issue, fix: issue });
 
 const paper = {
   sourceFile: 'D:\\papers\\MTP-2-PCB-XI-2027_4961.docx',
@@ -38,6 +40,37 @@ const paper = {
     advisory(49, 'CHEMISTRY', 'assertion-reason', 'Assertion-Reason / Statement-I-II style question.'),
     advisory(59, 'CHEMISTRY', 'references-other-option', 'Option text refers to another option: "Both (A) and (B)"'),
     advisory(136, 'BIOLOGY', 'catch-all-option', 'Contains a catch-all option: "None of the above"'),
+  ],
+  layoutNotes: [
+    note(116, 'BIOLOGY', 'mixed-auto-and-typed-labels'),
+    note(127, 'BIOLOGY', 'mixed-auto-and-typed-labels'),
+    note(128, 'BIOLOGY', 'mixed-auto-and-typed-labels'),
+    note(131, 'BIOLOGY', 'mixed-auto-and-typed-labels'),
+    note(8, 'PHYSICS', 'label-not-after-tab'),
+    note(26, 'PHYSICS', 'label-not-after-tab'),
+    note(89, 'CHEMISTRY', 'several-lettered-lists'),
+  ],
+  layoutNoteGroups: [
+    {
+      issue: 'mixed-auto-and-typed-labels',
+      label: 'Some options are lettered by Word and the rest typed by hand',
+      fix: 'Letter all four options the same way: either let Word letter all four, or type all four labels.',
+      questionNumbers: [116, 127, 128, 131],
+    },
+    {
+      issue: 'label-not-after-tab',
+      label: 'An option label has no tab in front of it',
+      fix: 'Press Tab before each option label, so the label always follows a tab.',
+      questionNumbers: [8, 26],
+    },
+    {
+      issue: 'several-lettered-lists',
+      label: 'More than one lettered list could have been the options',
+      fix:
+        'Letter only the options with a bracketed "(A) (B) (C) (D)" list, and give any other lettered ' +
+        'list a different style, such as "A." or "(i) (ii)".',
+      questionNumbers: [89],
+    },
   ],
 };
 

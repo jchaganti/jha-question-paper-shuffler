@@ -1,4 +1,4 @@
-import type { SkipReason } from '../../shared/types';
+import type { OptionLayoutNote, SkipReason } from '../../shared/types';
 import type { Element, Node } from '../docx/dom';
 import { NS, childElements, firstChild, replaceChildren } from '../docx/xml';
 import type { NumberingIndex } from '../parse/NumberingIndex';
@@ -48,6 +48,21 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
     // A question can hold both a lettered statement list ("A. ...") and the option list
     // ("(A) ..."). Options are the bracketed one; upper case wins over lower case.
     const candidates = narrow(rightSize);
+    // Preferring one list over another is a judgement, so say so even when it worked.
+    const notes: OptionLayoutNote[] =
+      rightSize.length > 1 && candidates.length === 1
+        ? [
+            {
+              issue: 'several-lettered-lists',
+              detail:
+                `This question has ${rightSize.length} lettered lists of four items; the ` +
+                `${candidates[0]!.bracketed ? 'bracketed' : 'upper case'} one was taken as the options.`,
+              fix:
+                'Letter only the options with a bracketed "(A) (B) (C) (D)" list, and give any other ' +
+                'lettered list a different style, such as "A." or "(i) (ii)".',
+            },
+          ]
+        : [];
     if (candidates.length > 1) {
       return {
         ok: false,
@@ -75,7 +90,7 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
       }
     }
 
-    return { ok: true, options: new AutoLetteredOptionSet(paragraphs, contents) };
+    return { ok: true, options: new AutoLetteredOptionSet(paragraphs, contents), notes };
   }
 
   private letterListsIn(block: QuestionBlock): LetterList[] {

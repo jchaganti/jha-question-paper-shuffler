@@ -1,4 +1,4 @@
-import type { SkipReason } from '../../shared/types';
+import type { OptionLayoutNote, SkipReason } from '../../shared/types';
 import type { QuestionBlock } from '../parse/PaperModel';
 
 /**
@@ -20,7 +20,15 @@ export interface OptionSet {
 }
 
 export type OptionSetResult =
-  | { readonly ok: true; readonly options: OptionSet }
+  | {
+      readonly ok: true;
+      readonly options: OptionSet;
+      /**
+       * Empty when the options were read with certainty. Otherwise, what had to be worked
+       * out - the options are still shuffled, but the document should be corrected.
+       */
+      readonly notes: readonly OptionLayoutNote[];
+    }
   | { readonly ok: false; readonly reason: SkipReason; readonly detail: string };
 
 export interface IOptionSetParser {

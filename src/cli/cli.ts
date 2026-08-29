@@ -3,9 +3,12 @@
  *
  *   node dist/cli/cli.js --file "paper.docx" --sets 3 --shuffle-questions --shuffle-options \
  *        --keep-question-positions 10,11 --keep-option-order 1,4,8 --seed demo
+ *
+ * Questions are kept whole on one page unless --allow-page-splits is passed.
  *   node dist/cli/cli.js --file "paper.docx" --inspect
  */
 import { GenerationService, parseNumberList } from '../core/generate/GenerationService';
+import { questionsWithLayoutNotes } from '../shared/layoutNotes';
 import type { GenerationRequest } from '../shared/types';
 
 interface Args {
@@ -34,7 +37,7 @@ async function main(): Promise<void> {
   if (!file) {
     console.error('Usage: --file <paper.docx> [--sets N] [--shuffle-questions] [--shuffle-options]');
     console.error('       [--keep-question-positions 1,2] [--keep-option-order 3,4] [--seed text]');
-    console.error('       [--inspect] [--dry-run]');
+    console.error('       [--allow-page-splits] [--inspect] [--dry-run]');
     process.exitCode = 2;
     return;
   }
@@ -57,6 +60,10 @@ async function main(): Promise<void> {
     for (const item of summary.advisories) {
       console.log(`  Q${item.questionNumber} [${item.subject}] ${item.kind}: ${item.detail}`);
     }
+    console.log(`\nShuffled, but worth correcting in the Word document (${summary.layoutNotes.length}):`);
+    for (const item of summary.layoutNotes) {
+      console.log(`  Q${item.questionNumber} [${item.subject}] ${item.issue}: ${item.detail}`);
+    }
     return;
   }
 
@@ -68,6 +75,7 @@ async function main(): Promise<void> {
     questionExclusions: parseNumberList(typeof args['keep-question-positions'] === 'string' ? args['keep-question-positions'] : ''),
     optionExclusions: parseNumberList(typeof args['keep-option-order'] === 'string' ? args['keep-option-order'] : ''),
     seed: typeof args.seed === 'string' ? args.seed : undefined,
+    keepQuestionsWhole: args['allow-page-splits'] !== true,
   };
 
   if (args['dry-run']) {
@@ -91,6 +99,17 @@ async function main(): Promise<void> {
       console.log(`  Q${item.questionNumber} [${item.subject}] ${item.reason}: ${item.detail}`);
     }
     console.log(`\nOptions kept because you asked (${report.optionsKeptByUser.length}): ${report.optionsKeptByUser.join(', ') || '-'}`);
+    const groups = report.paper.layoutNoteGroups;
+    if (groups.length > 0) {
+      const affected = questionsWithLayoutNotes(report.paper.layoutNotes);
+      console.log(`\nShuffled, but worth correcting in the Word document (${affected.length} question(s)):`);
+      for (const group of groups) {
+        console.log(`  ${group.label}`);
+        console.log(`    questions: ${group.questionNumbers.join(', ')}`);
+        console.log(`    fix: ${group.fix}`);
+      }
+    }
+
     console.log(`\nSuggested for --keep-option-order (${report.suggestedForExclusion.length}):`);
     for (const item of report.suggestedForExclusion) {
       console.log(`  Q${item.questionNumber} [${item.subject}] ${item.kind}: ${item.detail}`);
