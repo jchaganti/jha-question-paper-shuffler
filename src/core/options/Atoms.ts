@@ -32,6 +32,12 @@ export interface Atom {
   readonly blank: boolean;
   /** True when the atom holds a floating (anchored) image, which must not be moved. */
   readonly floatingGraphic: boolean;
+  /**
+   * True when the atom is a `w:sym` - a character from a symbol font, inserted with
+   * Insert > Symbol. It carries ink but no readable text, so it cannot be told apart
+   * from its neighbours by reading the paragraph.
+   */
+  readonly symbol: boolean;
 }
 
 export interface ParagraphAtoms {
@@ -84,6 +90,7 @@ function makeAtom(node: Element, source: Element, paragraphIndex: number): Atom 
     text,
     blank: !ink,
     floatingGraphic: hasFloatingGraphic(source),
+    symbol: source.namespaceURI === NS.w && source.localName === 'sym',
   };
 }
 
@@ -192,6 +199,55 @@ export function splitAtomsAtOffsets(atoms: readonly Atom[], offsets: readonly nu
   return out;
 }
 
+/**
+ * Splits one option's atoms into the layout that belongs to the *slot* and the answer text
+ * that moves with the *content*.
+ *
+ * Whole blank atoms at either end are layout - the tab after a label, a spacer paragraph.
+ * So is whitespace at the edges *inside* an atom, and that is the subtle case: when four
+ * options share a line, the run holding an option often carries the space that separates
+ * it from the next label ("(i), (ii) and (iii) " then "(D)"). Letting that space travel
+ * with the content glues the next label onto whatever lands there - "all of the above(D)".
+ *
+ * Trimming it into the padding keeps every separator exactly where the author put it, and
+ * loses nothing: the padding is re-emitted for the slot it came from.
+ */
+export function splitLeadCorePad(content: readonly Atom[]): {
+  lead: Atom[];
+  core: Atom[];
+  pad: Atom[];
+} {
+  let start = 0;
+  while (start < content.length && content[start]!.blank) start++;
+  let end = content.length;
+  while (end > start && content[end - 1]!.blank) end--;
+
+  const lead = content.slice(0, start);
+  const pad = content.slice(end);
+  let core = content.slice(start, end);
+
+  const first = core[0];
+  if (first) {
+    const spaces = first.text.length - first.text.replace(/^\s+/, '').length;
+    if (spaces > 0 && isSplittableText(first)) {
+      lead.push(sliceTextAtom(first, 0, spaces));
+      core = [sliceTextAtom(first, spaces, first.text.length), ...core.slice(1)];
+    }
+  }
+
+  // Read the last atom *after* the leading split, in case the core is a single atom.
+  const last = core[core.length - 1];
+  if (last) {
+    const kept = last.text.replace(/\s+$/, '').length;
+    if (kept > 0 && kept < last.text.length && isSplittableText(last)) {
+      pad.unshift(sliceTextAtom(last, kept, last.text.length));
+      core = [...core.slice(0, -1), sliceTextAtom(last, 0, kept)];
+    }
+  }
+
+  return { lead, core, pad };
+}
+
 function isSplittableText(atom: Atom): boolean {
   const run = atom.node;
   if (run.namespaceURI !== NS.w || run.localName !== 'r') return false;
@@ -213,5 +269,6 @@ function sliceTextAtom(atom: Atom, from: number, to: number): Atom {
     text: slice,
     blank: slice.trim() === '',
     floatingGraphic: false,
+    symbol: false,
   };
 }

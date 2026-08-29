@@ -9,7 +9,13 @@ import { NS, isElement, visibleText } from '../docx/xml';
 import type { NumberingIndex } from '../parse/NumberingIndex';
 import { paragraphNumId } from '../parse/PaperParser';
 import type { QuestionBlock } from '../parse/PaperModel';
-import { buildParagraphAtoms, splitAtomsAtOffsets, type Atom, type ParagraphAtoms } from './Atoms';
+import {
+  buildParagraphAtoms,
+  splitAtomsAtOffsets,
+  splitLeadCorePad,
+  type Atom,
+  type ParagraphAtoms,
+} from './Atoms';
 
 export interface OptionSlot {
   readonly letter: OptionLetter;
@@ -226,21 +232,27 @@ export class OptionBlockParser {
       labelRanges.unshift({ from: start, to: start });
     }
 
+    const symbolLabel = symbolBeforeLabel(flat, labelRanges);
+    if (symbolLabel !== undefined) {
+      return {
+        ok: false,
+        reason: 'label-bracket-is-a-symbol',
+        detail:
+          `Option label (${symbolLabel}) follows a character inserted from a symbol font, which is ` +
+          'how an opening bracket typed with Insert > Symbol appears. That character carries no ' +
+          'readable text, so where the option before it ends cannot be established.',
+      };
+    }
+
     const slots: OptionSlot[] = [];
     for (let i = 0; i < OPTION_LETTERS.length; i++) {
       const range = labelRanges[i]!;
       const contentEnd = i + 1 < OPTION_LETTERS.length ? labelRanges[i + 1]!.from : flat.length;
       const content = flat.slice(range.to, contentEnd);
 
-      // Blank atoms at either end are layout (tabs, spacer paragraphs); they stay put.
-      let coreStart = 0;
-      while (coreStart < content.length && content[coreStart]!.blank) coreStart++;
-      let coreEnd = content.length;
-      while (coreEnd > coreStart && content[coreEnd - 1]!.blank) coreEnd--;
-
-      const leadAtoms = content.slice(0, coreStart);
-      const coreAtoms = content.slice(coreStart, coreEnd);
-      const padAtoms = content.slice(coreEnd);
+      // Tabs, spacer paragraphs and the spaces that separate one option from the next
+      // label are layout: they belong to this slot and stay put.
+      const { lead: leadAtoms, core: coreAtoms, pad: padAtoms } = splitLeadCorePad(content);
       const labelAtoms = flat.slice(range.from, range.to);
       const paragraphIndex =
         labelAtoms[0]?.paragraphIndex ?? leadAtoms[0]?.paragraphIndex ?? coreAtoms[0]?.paragraphIndex ?? 0;
@@ -312,6 +324,31 @@ export class OptionBlockParser {
       detail: `Expected labels A,B,C,D but found "${sequence}".`,
     };
   }
+}
+
+/**
+ * Finds a label whose opening bracket was typed as a symbol-font character.
+ *
+ * Such a bracket is a `w:sym`: it prints as "(" but holds no text, so reading the
+ * paragraph gives "A)" and the bracket looks like the tail of the *previous* option's
+ * content. The parser cannot tell the two apart, so the question is refused rather than
+ * shuffled with a guessed boundary - moving the option would leave the bracket behind.
+ *
+ * Returns the letter of the offending label, or undefined when every label is plain text.
+ */
+function symbolBeforeLabel(
+  flat: readonly Atom[],
+  labelRanges: readonly { from: number; to: number }[],
+): OptionLetter | undefined {
+  for (let i = 0; i < labelRanges.length; i++) {
+    const range = labelRanges[i]!;
+    // An option lettered by Word has no typed label, so there is no bracket to check.
+    if (range.to <= range.from) continue;
+    let previous = range.from - 1;
+    while (previous >= 0 && flat[previous]!.blank) previous--;
+    if (previous >= 0 && flat[previous]!.symbol) return OPTION_LETTERS[i];
+  }
+  return undefined;
 }
 
 function findLabels(paragraphAtoms: readonly ParagraphAtoms[], pass: SearchPass): LabelHit[] {

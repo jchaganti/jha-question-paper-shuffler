@@ -406,15 +406,22 @@ clear error message when they do not hold.
    *statement* list, so the list written `(%1)` wins over one written `%1.`, and upper case
    wins over lower case; when that still leaves two candidates the question is skipped
    rather than guessed at.
-8. **Only the four option contents move; labels, tabs and paragraph boundaries do not.**
-   Column alignment is therefore preserved structurally, but because options differ in
-   length the text after a tab stop can sit slightly differently, and a paper may gain or
-   lose a page through reflow (the sample paper goes from 29 to 30 pages).
+8. **Only the four option contents move; labels, tabs, spacing and paragraph boundaries do
+   not.** Whitespace at the edges of an option is separator, not content — including a
+   space inside the same run as the option text, which is how four options on one line are
+   often parted (`…(iii) (D)…`). Letting it travel would glue the next label onto whatever
+   landed there. Shuffling therefore changes the order of words in a question and nothing
+   else; the tests assert that the multiset of words is identical before and after.
+   Column alignment is preserved structurally, but because options differ in length the
+   text after a tab stop can sit slightly differently, and a paper may gain or lose a page
+   through reflow.
 9. **A question is skipped, never guessed at.** If the four options cannot be identified
    with certainty, that question keeps its original option order and is listed in the
    report. This happens for options laid out inside a table, options that continue onto
    another paragraph, options that anchor a floating picture (moving the run would leave
-   the picture behind), and questions where two lettered lists could equally be the options.
+   the picture behind), questions where two lettered lists could equally be the options, and
+   labels whose opening bracket was inserted from a symbol font — that bracket prints as `(`
+   but holds no text, so where the option before it ends cannot be established.
    Where a fallback in assumption 6 or 7 *did* make the options readable, the question is
    shuffled but still reported — see
    [Shuffled, but worth correcting](#shuffled-but-worth-correcting). Nothing the tool works
@@ -456,6 +463,7 @@ That is the answer for a specific paper. In general:
 | Two lists that could equally be the options | Question keeps its option order and is listed in the report. |
 | Options laid out inside a table, or a mix of one auto-lettered option and typed labels | Question keeps its option order and is listed in the report. |
 | 3 or 5 options, options continuing onto another paragraph, an option anchoring a floating picture | Question keeps its option order and is listed in the report. |
+| A label whose opening bracket was put in with *Insert → Symbol* | Question keeps its option order and is listed in the report. |
 | Question numbers typed by hand instead of Word numbering | **Hard error** naming the lists it did find. |
 | Each subject restarting numbering at 1 | **Hard error** - a key entry would no longer identify one question. |
 | Answer key missing, bracketed (`(A)`), or with number and letter in one cell | **Hard error** - the key is not detected. |

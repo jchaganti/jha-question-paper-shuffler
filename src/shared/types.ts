@@ -52,6 +52,8 @@ export type SkipReason =
   | 'option-spans-paragraphs'
   | 'option-contains-floating-graphic'
   | 'options-inside-table'
+  /** A label's opening bracket is a symbol-font character, not ordinary text. */
+  | 'label-bracket-is-a-symbol'
   /** An auto-lettered list was found, but not with exactly four items. */
   | 'unexpected-option-count'
   /** Several lettered lists could be the options; the tool will not guess. */

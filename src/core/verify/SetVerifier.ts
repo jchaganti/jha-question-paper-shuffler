@@ -37,16 +37,13 @@ export class SetVerifier {
   constructor(private readonly parser: PaperParser = new PaperParser()) {}
 
   static factsOf(paper: ParsedPaper, optionParser: IOptionSetParser): OriginalFacts {
-    const stemCounts = new Map<string, number>();
-    const stemToNumber = new Map<string, number>();
     const slotSignatures = new Map<number, readonly string[]>();
     const answers = new Map<number, OptionLetter>();
+    const strict = new Index();
 
     for (const section of paper.sections) {
       for (const block of section.blocks) {
-        const signature = questionSignature(block, optionParser);
-        stemCounts.set(signature, (stemCounts.get(signature) ?? 0) + 1);
-        stemToNumber.set(signature, block.printedNumber);
+        strict.add(questionSignature(block, optionParser), block.printedNumber);
         const parsed = optionParser.parse(block);
         if (parsed.ok) slotSignatures.set(block.printedNumber, parsed.options.signatures);
         const answer = paper.answerKey.answerOf(block.printedNumber);
@@ -54,11 +51,7 @@ export class SetVerifier {
       }
     }
 
-    for (const [signature, count] of stemCounts) {
-      if (count > 1) stemToNumber.delete(signature);
-    }
-
-    return { questionCount: paper.questionCount, stemToNumber, slotSignatures, answers };
+    return { questionCount: paper.questionCount, stemToNumber: strict.unique(), slotSignatures, answers };
   }
 
   async verify(buffer: Buffer, original: OriginalFacts): Promise<VerificationResult> {
@@ -136,6 +129,29 @@ export class SetVerifier {
     });
 
     return { ok: checks.every((check) => check.ok), checks };
+  }
+}
+
+/**
+ * Fingerprint -> question number, keeping only fingerprints that identify one question.
+ * A fingerprint shared by two questions identifies neither, so it is dropped rather than
+ * allowed to match the wrong one.
+ */
+class Index {
+  private readonly counts = new Map<string, number>();
+
+  private readonly numbers = new Map<string, number>();
+
+  add(signature: string, questionNumber: number): void {
+    this.counts.set(signature, (this.counts.get(signature) ?? 0) + 1);
+    this.numbers.set(signature, questionNumber);
+  }
+
+  unique(): ReadonlyMap<string, number> {
+    for (const [signature, count] of this.counts) {
+      if (count > 1) this.numbers.delete(signature);
+    }
+    return this.numbers;
   }
 }
 

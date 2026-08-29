@@ -83,6 +83,23 @@ export const oleOptionParagraph = (label: string, relationshipId: string): strin
   `<w:r><w:object w:dxaOrig="680" w:dyaOrig="320"><v:shape id="s${relationshipId}" style="width:34pt;height:16pt"/>` +
   `<o:OLEObject Type="Embed" ProgID="Equation.DSMT4" r:id="${relationshipId}"/></w:object></w:r></w:p>`;
 
+/**
+ * An option line whose label brackets were put in with Insert > Symbol: the "(" is a
+ * `w:sym` that prints as a bracket but holds no text, so reading the paragraph gives
+ * "A) ... B) ..." with the brackets invisible.
+ */
+export const symbolBracketOptionParagraph = (values: readonly string[]): string => {
+  const sym = '<w:r><w:sym w:font="Symbol" w:char="F028"/></w:r>';
+  const label = (letter: string): string => `${sym}<w:r><w:t xml:space="preserve">${letter}) </w:t></w:r><w:r><w:tab/></w:r>`;
+  return (
+    '<w:p><w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>' +
+    values
+      .map((value, index) => `${label('ABCD'[index]!)}<w:r><w:t xml:space="preserve">${value}</w:t></w:r><w:r><w:tab/></w:r>`)
+      .join('') +
+    '</w:p>'
+  );
+};
+
 /** An option paragraph that anchors a floating picture (must never be moved). */
 export const floatingPictureOptionParagraph = (label: string): string =>
   `<w:p><w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>` +
