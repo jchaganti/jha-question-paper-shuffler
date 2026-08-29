@@ -128,7 +128,10 @@ export class PaperParser {
         }
       }
 
-      return { subject: range.subject, headerNodes, blocks, tailNodes };
+      // Only a real heading counts: the "ALL" fallback section starts at the top of the
+      // paper, where the first paragraph is the paper's title, not a subject.
+      const headingNode = headingIndexes.length > 0 ? nodes[0] : undefined;
+      return { subject: range.subject, headingNode, headerNodes, blocks, tailNodes };
     });
 
     return {

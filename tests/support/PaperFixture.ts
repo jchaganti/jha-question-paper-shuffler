@@ -116,7 +116,14 @@ export interface FixtureOptions {
   readonly omitAnswerKeyHeading?: boolean;
   /** Raw XML inserted immediately before the answer key, e.g. a typed page break. */
   readonly beforeAnswerKey?: string;
+  /** Raw XML inserted before every subject heading, e.g. a typed page break. */
+  readonly beforeEachSubject?: string;
+  /** Raw XML inserted once, before the first subject heading, e.g. a cover line. */
+  readonly beforeFirstSubject?: string;
 }
+
+/** A paragraph with no properties, for building raw XML in tests. */
+export const plainParagraphXml = (text: string): string => plainParagraph(text);
 
 export function buildDocumentXml(
   sections: readonly FixtureSection[],
@@ -125,7 +132,9 @@ export function buildDocumentXml(
   const body: string[] = [];
   const key: { number: number; answer: string }[] = [];
 
-  for (const section of sections) {
+  sections.forEach((section, sectionIndex) => {
+    if (sectionIndex === 0 && options.beforeFirstSubject) body.push(options.beforeFirstSubject);
+    if (options.beforeEachSubject) body.push(options.beforeEachSubject);
     body.push(plainParagraph(section.subject));
     body.push('<w:p/>');
     section.questions.forEach((question, index) => {
@@ -152,7 +161,7 @@ export function buildDocumentXml(
     });
     // Spacer paragraphs that close a subject.
     body.push('<w:p/>', '<w:p/>', '<w:p/>');
-  }
+  });
 
   if (options.beforeAnswerKey) body.push(options.beforeAnswerKey);
   if (!options.omitAnswerKeyHeading) {

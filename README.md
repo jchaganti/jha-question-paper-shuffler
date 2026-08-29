@@ -212,22 +212,45 @@ Two limits, both deliberate:
 
 Turn it off with `--allow-page-splits` on the command line.
 
-### The answer key starts a new page
+### Each subject and the answer key start a new page
 
-Always, and with no setting to turn it off — an answer key printed under the last question
-is too easy to hand out with the paper.
+Always, with no setting to turn it off. Both are structural: a subject that begins halfway
+down a page reads as a continuation of the previous one, and an answer key printed under
+the last question is too easy to hand out with the paper.
 
-Papers push the key onto its own page with a run of blank paragraphs, which works for the
-original but not after shuffling: the text reflows, and blank paragraphs are only worth
-whatever space is left on the page. Group C has no blank paragraphs at all before its key,
-so its generated sets ran the key on straight after the last option. The generated paper
-therefore states the intent — `w:pageBreakBefore` on the "ANSWER KEY" heading (or, in a
-paper that has no such heading, on the first paragraph inside the key table).
+Papers achieve this with a run of blank paragraphs, which works for the original but not
+after shuffling: the text reflows, and blank paragraphs are only worth whatever space is
+left on the page. Group C has no blank paragraphs at all before its answer key, so its
+generated sets ran the key on straight after the last option. The generated paper therefore
+states the intent — `w:pageBreakBefore` on each subject heading and on the "ANSWER KEY"
+heading (or, in a paper that has no such heading, on the first paragraph inside the key
+table).
 
-If a break is already there — a typed page break, a next-page section break, or the
-property itself — nothing is added, so no paper gains a blank page. Measured on three
-Group C sets: the key moved from sharing page 30/31 with the last question to starting page
-31/32, and Word reports no page without text in either version.
+Nothing is added when a break is already there — a typed page break, a next-page section
+break, or the property itself — so no paper gains a blank page. Two more cases are left
+alone:
+
+- **The first subject when it opens the document.** All five NEET samples start with
+  `PHYSICS` as the very first paragraph (the course/test/date line lives in the Word page
+  *header*), so it already opens page 1 and asking for a break there is how a document
+  gains a leading blank page. A paper with a cover line above its first subject *does* get
+  the break, so the cover keeps a page to itself.
+- **A paper with no subject headings.** Its single section covers the whole paper and its
+  first paragraph is the paper's own title, not a subject, so there is nothing to mark.
+
+Measured with Word on a Group C set, same shuffle, with the breaks stripped and applied:
+
+| | Without | With |
+| --- | --- | --- |
+| PHYSICS | p1, opens the page | p1, opens the page |
+| CHEMISTRY | p7, **mid-page** | **p8**, opens the page |
+| BIOLOGY | p14, **mid-page** | **p16**, opens the page |
+| ANSWER KEY | p32, opens the page | p33, opens the page |
+| Pages | 33 | 34 |
+| Pages with no text | none | none |
+
+Across the sample folder: the five multi-subject papers get a break on `CHEMISTRY` and
+`BIOLOGY`; the four single-topic papers are untouched.
 
 ## Outputs
 
@@ -251,7 +274,7 @@ Each generated paper:
   from the source, because the tool edits `word/document.xml` and copies every other part
   of the package byte-for-byte;
 - keeps every question whole on one page (see below);
-- starts the answer key on a page of its own (see below).
+- starts each subject, and the answer key, on a page of its own (see below).
 
 `_generation-report.md` records, per run: the run seed, the paper structure, the questions
 whose options could not be shuffled (and why), the questions worth excluding, the
@@ -271,8 +294,8 @@ DocxPackage        read/write the .docx zip; only word/document.xml is modified
     AutoLetteredOptionParser one option per Word-numbered paragraph
   ShufflePlanner   pure plan: question order per subject + option permutation per question
   SetBuilder       applies a plan: swap option contents, re-order blocks, rewrite the key
-  PageFlowGuard    marks each question so a page break cannot cut it in half, and puts
-                   the answer key on a page of its own
+  PageFlowGuard    marks each question so a page break cannot cut it in half, and starts
+                   each subject and the answer key on a page of its own
   SetVerifier      re-opens the written file and proves it is correct
 GenerationService  inspect / dryRun / generate; used by both the UI and the CLI
 ```
@@ -405,9 +428,9 @@ clear error message when they do not hold.
     order unless it was excluded or unshufflable.
 12. **Page breaks are Word's to place, not the tool's.** "Keep each question on one page"
     adds `w:keepNext` / `w:keepLines` / `w:cantSplit` and lets Word lay the paper out; the
-    tool never measures a page and never moves content to make one fit. The single break it
-    does ask for is `w:pageBreakBefore` on the answer key, and only when no break is there
-    already. Flags in the source document are left alone.
+    tool never measures a page and never moves content to make one fit. The only breaks it
+    asks for are `w:pageBreakBefore` on each subject heading and on the answer key, and only
+    where no break is there already. Flags in the source document are left alone.
 
 ## Will it work on my paper?
 

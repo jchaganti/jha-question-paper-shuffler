@@ -11,7 +11,7 @@ import { NumberingIndex } from '../src/core/parse/NumberingIndex';
 import { PaperParser, isEmptyParagraph } from '../src/core/parse/PaperParser';
 import type { ParsedPaper } from '../src/core/parse/PaperModel';
 import type { GenerationRequest } from '../src/shared/types';
-import { buildPaper, defaultSections } from './support/PaperFixture';
+import { buildPaper, defaultSections, plainParagraphXml } from './support/PaperFixture';
 
 let workingDir = '';
 let sourceFile = '';
@@ -241,6 +241,78 @@ describe('the answer key starts a page of its own', () => {
 
     new PageFlowGuard().answerKeyOnNewPage(paper);
     expect(childElements(pPr).map((child) => child.localName)).toEqual(['pageBreakBefore', 'jc', 'rPr']);
+  });
+});
+
+describe('each subject starts a page of its own', () => {
+  it('marks every subject except the one that opens the document', async () => {
+    const paper = await parse(await fs.readFile(sourceFile));
+    // PHYSICS is the first node of the body; CHEMISTRY follows Physics mid-page.
+    expect(new PageFlowGuard().subjectsOnNewPage(paper)).toBe(1);
+
+    const [physics, chemistry] = paper.sections;
+    expect(has(physics!.headingNode!, 'pageBreakBefore')).toBe(false);
+    expect(has(chemistry!.headingNode!, 'pageBreakBefore')).toBe(true);
+  });
+
+  it('marks the first subject too when something comes before it', async () => {
+    // A cover line above PHYSICS, the way a paper with a printed title page has.
+    const buffer = await buildPaper(defaultSections(), { beforeFirstSubject: plainParagraphXml('MODEL TEST PAPER') });
+    const paper = await parse(buffer);
+
+    expect(new PageFlowGuard().subjectsOnNewPage(paper)).toBe(2);
+    expect(has(paper.sections[0]!.headingNode!, 'pageBreakBefore')).toBe(true);
+  });
+
+  it('does nothing for a paper whose subjects were not recognised', async () => {
+    // One section called ALL, whose first paragraph is the paper title, not a subject.
+    const [physics, chemistry] = defaultSections();
+    const buffer = await buildPaper([
+      {
+        subject: 'ANIMAL KINGDOM',
+        startNumber: 1,
+        numId: '1',
+        questions: [...physics!.questions, ...chemistry!.questions],
+      },
+    ]);
+    const paper = await parse(buffer);
+
+    expect(paper.sections).toHaveLength(1);
+    expect(paper.sections[0]!.subject).toBe('ALL');
+    expect(paper.sections[0]!.headingNode).toBeUndefined();
+    expect(new PageFlowGuard().subjectsOnNewPage(paper)).toBe(0);
+    expect(has(paper.sections[0]!.headerNodes[0]!, 'pageBreakBefore')).toBe(false);
+  });
+
+  it('adds nothing when a typed page break already separates the subjects', async () => {
+    const buffer = await buildPaper(defaultSections(), {
+      beforeEachSubject: '<w:p><w:r><w:br w:type="page"/></w:r></w:p>',
+    });
+    const paper = await parse(buffer);
+
+    expect(new PageFlowGuard().subjectsOnNewPage(paper)).toBe(0);
+    expect(has(paper.sections[1]!.headingNode!, 'pageBreakBefore')).toBe(false);
+  });
+
+  it('is idempotent', async () => {
+    const paper = await parse(await fs.readFile(sourceFile));
+    const guard = new PageFlowGuard();
+    expect(guard.subjectsOnNewPage(paper)).toBe(1);
+    expect(guard.subjectsOnNewPage(paper)).toBe(0);
+
+    const pPr = firstChild(paper.sections[1]!.headingNode!, NS.w, 'pPr')!;
+    expect(childElements(pPr).filter((child) => child.localName === 'pageBreakBefore')).toHaveLength(1);
+  });
+
+  it('applies to a generated set, and does not disturb the shuffle', async () => {
+    const result = await service.generate(request());
+    expect(result.sets[0]!.verification.ok).toBe(true);
+
+    const generated = await parse(await fs.readFile(result.sets[0]!.filePath));
+    expect(has(generated.sections[0]!.headingNode!, 'pageBreakBefore')).toBe(false);
+    expect(has(generated.sections[1]!.headingNode!, 'pageBreakBefore')).toBe(true);
+    // The subject heading is not part of any question, so no keepNext chain reaches it.
+    expect(has(generated.sections[1]!.headingNode!, 'keepNext')).toBe(false);
   });
 });
 

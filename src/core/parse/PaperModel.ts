@@ -17,6 +17,12 @@ export interface QuestionBlock {
 
 export interface PaperSection {
   readonly subject: string;
+  /**
+   * The paragraph that announces the subject, when the paper has one. Absent when no
+   * subject heading was recognised and the whole paper is treated as a single section -
+   * in that case `headerNodes` opens with the paper's own title, which is not a subject.
+   */
+  readonly headingNode?: Element;
   /** Subject heading plus anything before the first question (kept in place). */
   readonly headerNodes: Element[];
   readonly blocks: QuestionBlock[];

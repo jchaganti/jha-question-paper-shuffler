@@ -56,20 +56,42 @@ export class PageFlowGuard {
    * Returns true when the property was added.
    */
   answerKeyOnNewPage(paper: ParsedPaper): boolean {
+    const body = childElements(paper.body);
+    const index = body.length - paper.answerKeyNodes.length;
     const first = paper.answerKeyNodes[0];
     if (!first) return false;
 
     // The key normally opens with its "ANSWER KEY" heading; when a paper has no heading
     // it opens with the table, and the break goes on the first paragraph inside it.
     const target = isWordElement(first, 'p') ? first : descendants(first, NS.w, 'p')[0];
-    if (!target) return false;
+    return target ? startOnNewPage(body, index, target) : false;
+  }
 
-    const existing = firstChild(target, NS.w, 'pPr');
-    if (existing && firstChild(existing, NS.w, 'pageBreakBefore')) return false;
-    if (breakAlreadyPrecedes(paper)) return false;
-
-    ensureFlag(ensurePPr(target), 'pageBreakBefore', PPR_ORDER);
-    return true;
+  /**
+   * Starts each subject on a fresh page, by the same rule as the answer key: papers
+   * separate their subjects with blank paragraphs, which stops working once the questions
+   * are re-ordered and the text reflows.
+   *
+   * Skipped for a subject that already opens a page, and for the first subject when it is
+   * the very start of the document - there is nothing to break away from, and asking for a
+   * break there is how a document gains a leading blank page.
+   *
+   * A paper whose subjects the tool did not recognise has no subject headings to mark, so
+   * nothing happens (its one section covers the whole paper).
+   *
+   * Returns how many subjects were marked.
+   */
+  subjectsOnNewPage(paper: ParsedPaper): number {
+    const body = childElements(paper.body);
+    let count = 0;
+    for (const section of paper.sections) {
+      const heading = section.headingNode;
+      if (!heading) continue;
+      const index = body.indexOf(heading);
+      if (index <= 0) continue;
+      if (startOnNewPage(body, index, heading)) count++;
+    }
+    return count;
   }
 
   /**
@@ -170,13 +192,25 @@ function isWordElement(node: Element, localName: string): boolean {
 }
 
 /**
- * True when a page already ends between the last real content of the paper and the answer
- * key. Blank paragraphs are walked over - one of them may be the paragraph that *holds*
+ * Asks Word to start `target` at the top of a page, unless a page already ends in front of
+ * it. Returns true when the property was added.
+ */
+function startOnNewPage(body: readonly Element[], index: number, target: Element): boolean {
+  const existing = firstChild(target, NS.w, 'pPr');
+  if (existing && firstChild(existing, NS.w, 'pageBreakBefore')) return false;
+  if (breakAlreadyPrecedes(body, index)) return false;
+
+  ensureFlag(ensurePPr(target), 'pageBreakBefore', PPR_ORDER);
+  return true;
+}
+
+/**
+ * True when a page already ends between the last real content before `index` and `index`
+ * itself. Blank paragraphs are walked over - one of them may be the paragraph that *holds*
  * the break run, and a blank paragraph never ends a page by itself.
  */
-function breakAlreadyPrecedes(paper: ParsedPaper): boolean {
-  const body = childElements(paper.body);
-  for (let i = body.length - paper.answerKeyNodes.length - 1; i >= 0; i--) {
+function breakAlreadyPrecedes(body: readonly Element[], index: number): boolean {
+  for (let i = index - 1; i >= 0; i--) {
     const node = body[i]!;
     if (hasExplicitPageBreak(node)) return true;
     const pPr = isWordElement(node, 'p') ? firstChild(node, NS.w, 'pPr') : undefined;

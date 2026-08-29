@@ -156,8 +156,10 @@ export class SetBuilder {
     //    next one. Applied after re-ordering, because shuffling changes which question
     //    lands where and so which ones would have been cut in half.
     const questionsKeptWhole = input.keepQuestionsWhole ? this.pageFlow.keepQuestionsWhole(paper) : 0;
-    // The answer key always opens a page of its own: a key printed under the last question
-    // is easy to hand out by mistake. Not optional, and independent of the setting above.
+    // Each subject, and the answer key, always opens a page of its own. Both are structural
+    // and not optional: papers separate these with blank paragraphs, which only works until
+    // the text reflows.
+    this.pageFlow.subjectsOnNewPage(paper);
     this.pageFlow.answerKeyOnNewPage(paper);
 
     // 4. Stamp the set label onto the answer-key title line.
