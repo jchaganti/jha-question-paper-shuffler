@@ -388,6 +388,14 @@ clear error message when they do not hold.
    fallback, the first table whose cells pair a number with a letter A–D). The key must
    cover every question exactly once; the number of key entries is what defines the
    question count. Everything from the `ANSWER KEY` heading onwards is never shuffled.
+
+   A number box may be written `1`, `1.` or `1)` — the ordinal punctuation authors
+   habitually type names question 1 and nothing else, so all three are read. Anything else
+   after the number (`57,` for `57.`) is a slip rather than a convention: the box no longer
+   names a question, and the tool reports which box to retype instead of deciding for
+   itself which trailing characters are decoration. A key that skips a number inside its
+   own run is reported as incomplete before the question numbering is examined, so the
+   error names the key rather than blaming the numbering.
 4. **Printed question numbers come from the key**, in ascending order, matched to the
    questions in document order. Because questions only move inside a subject, the numbers
    printed at each position never change.
@@ -421,7 +429,11 @@ clear error message when they do not hold.
    another paragraph, options that anchor a floating picture (moving the run would leave
    the picture behind), questions where two lettered lists could equally be the options, and
    labels whose opening bracket was inserted from a symbol font — that bracket prints as `(`
-   but holds no text, so where the option before it ends cannot be established.
+   but holds no text, so where the option before it ends cannot be established. The missing
+   bracket is the whole signal there: only a label that reads as `A)` is suspect. A label
+   that reads as `(A)` has its bracket, so a symbol in front of it is the previous option's
+   *content* — an answer of `60Ω` or `15°` sitting last in its column, which after a shuffle
+   can land in front of any label — and the question shuffles normally.
    Where a fallback in assumption 6 or 7 *did* make the options readable, the question is
    shuffled but still reported — see
    [Shuffled, but worth correcting](#shuffled-but-worth-correcting). Nothing the tool works
@@ -464,9 +476,12 @@ That is the answer for a specific paper. In general:
 | Options laid out inside a table, or a mix of one auto-lettered option and typed labels | Question keeps its option order and is listed in the report. |
 | 3 or 5 options, options continuing onto another paragraph, an option anchoring a floating picture | Question keeps its option order and is listed in the report. |
 | A label whose opening bracket was put in with *Insert → Symbol* | Question keeps its option order and is listed in the report. |
+| An option whose *content* is a symbol (`60Ω`, `15°`), sitting right before the next label | Supported - the label has its own bracket, so the symbol is content and moves with it. |
+| Answer key numbers written `1.` or `1)` | Supported. |
 | Question numbers typed by hand instead of Word numbering | **Hard error** naming the lists it did find. |
 | Each subject restarting numbering at 1 | **Hard error** - a key entry would no longer identify one question. |
 | Answer key missing, bracketed (`(A)`), or with number and letter in one cell | **Hard error** - the key is not detected. |
+| A stray character in a key number box (`57,`) | **Hard error** naming the box to retype - the key is one answer short. |
 | Fewer than five questions | **Hard error** - too small to recognise a key table. |
 
 The design rule behind that table: the tool either does the right thing, refuses one

@@ -100,6 +100,27 @@ export const symbolBracketOptionParagraph = (values: readonly string[]): string 
   );
 };
 
+/**
+ * An option line whose *content* ends in a symbol-font character - "60Ω", "15°" - with
+ * ordinary typed "(A)" labels. The symbol sits immediately before the next label, which is
+ * where a genuine symbol *bracket* would also sit; the difference is that these labels
+ * carry their own opening bracket.
+ */
+export const symbolContentOptionParagraph = (values: readonly string[]): string => {
+  const omega = '<w:r><w:sym w:font="Symbol" w:char="F057"/></w:r>';
+  return (
+    '<w:p><w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>' +
+    values
+      .map(
+        (value, index) =>
+          `<w:r><w:t xml:space="preserve">(${'ABCD'[index]!}) </w:t></w:r><w:r><w:tab/></w:r>` +
+          `<w:r><w:t xml:space="preserve">${escape(value)}</w:t></w:r>${omega}<w:r><w:tab/></w:r>`,
+      )
+      .join('') +
+    '</w:p>'
+  );
+};
+
 /** An option paragraph that anchors a floating picture (must never be moved). */
 export const floatingPictureOptionParagraph = (label: string): string =>
   `<w:p><w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>` +
@@ -107,17 +128,23 @@ export const floatingPictureOptionParagraph = (label: string): string =>
   `<w:r><w:drawing><wp:anchor distT="0" distB="0"><wp:extent cx="100" cy="100"/></wp:anchor></w:drawing></w:r>` +
   `<w:r><w:t>diagram</w:t></w:r></w:p>`;
 
-function answerKeyTable(entries: readonly { number: number; answer: string }[], columns: number): string {
+function answerKeyTable(
+  entries: readonly { number: number; answer: string }[],
+  columns: number,
+  options: FixtureOptions = {},
+): string {
   const rowCount = Math.ceil(entries.length / columns);
   const grid = `<w:tblGrid>${'<w:gridCol w:w="500"/>'.repeat(columns * 2)}</w:tblGrid>`;
-  const cell = (value: string): string => `<w:tc><w:tcPr><w:tcW w:w="500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>${value}</w:t></w:r></w:p></w:tc>`;
+  const cell = (value: string): string => `<w:tc><w:tcPr><w:tcW w:w="500" w:type="dxa"/></w:tcPr><w:p><w:r><w:t>${escape(value)}</w:t></w:r></w:p></w:tc>`;
+  const numberText = (n: number): string =>
+    options.spoiltKeyNumbers?.includes(n) ? `${n},` : `${n}${options.answerKeyNumberSuffix ?? ''}`;
 
   const rows: string[] = [];
   for (let row = 0; row < rowCount; row++) {
     const cells: string[] = [];
     for (let column = 0; column < columns; column++) {
       const entry = entries[column * rowCount + row];
-      cells.push(cell(entry ? String(entry.number) : ''), cell(entry ? entry.answer : ''));
+      cells.push(cell(entry ? numberText(entry.number) : ''), cell(entry ? entry.answer : ''));
     }
     rows.push(`<w:tr>${cells.join('')}</w:tr>`);
   }
@@ -137,6 +164,13 @@ export interface FixtureOptions {
   readonly beforeEachSubject?: string;
   /** Raw XML inserted once, before the first subject heading, e.g. a cover line. */
   readonly beforeFirstSubject?: string;
+  /**
+   * Written after every question number in the key - "." or ")", the ordinal punctuation
+   * authors habitually type. Defaults to nothing.
+   */
+  readonly answerKeyNumberSuffix?: string;
+  /** Key numbers to spoil with a stray comma, as a mistyped "57," in place of "57.". */
+  readonly spoiltKeyNumbers?: readonly number[];
 }
 
 /** A paragraph with no properties, for building raw XML in tests. */
@@ -185,7 +219,7 @@ export function buildDocumentXml(
     body.push(plainParagraph('ANSWER KEY'));
     body.push(plainParagraph('MODEL TEST PAPER'));
   }
-  body.push(answerKeyTable(key.sort((a, b) => a.number - b.number), 2));
+  body.push(answerKeyTable(key.sort((a, b) => a.number - b.number), 2, options));
   body.push('<w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr>');
 
   return `${PROLOG}<w:document ${NAMESPACES}><w:body>${body.join('')}</w:body></w:document>`;

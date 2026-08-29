@@ -58,6 +58,11 @@ export class PaperParser {
           'continuous set of question numbers so that a key entry identifies exactly one question.',
       );
     }
+    // A hole inside the key's own run of numbers is always a defect, and it makes the key
+    // an undercount of the paper - so it is reported here, before that wrong total is used
+    // to work out the numbering and produces an error about the wrong thing.
+    const keyDefect = describeKeyGaps(answerKey);
+    if (keyDefect) throw new PaperParseError(`The answer key is incomplete. ${keyDefect}`);
     const keyNumbers = answerKey.questionNumbers;
 
     const questionNumIds = resolveQuestionNumIds(questionRegion, numbering, keyNumbers.length);
@@ -205,6 +210,45 @@ function countTrailingEmptyParagraphs(nodes: readonly Element[]): number {
     count++;
   }
   return count;
+}
+
+const list = (items: readonly (string | number)[]): string =>
+  items.length <= 2 ? items.join(' and ') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
+
+/**
+ * Turns "the key is one entry short" into the box the author has to correct. A gap in the
+ * key's own run of numbers names the question; a spoilt number box next to an answer
+ * letter - "57," for "57." - names the mistake itself.
+ */
+function describeKeyGaps(answerKey: AnswerKeyTable): string | undefined {
+  const gaps = answerKey.gaps;
+  const spoilt = answerKey.spoiltNumbers;
+  if (gaps.length === 0 && spoilt.length === 0) return undefined;
+
+  const parts: string[] = [];
+  if (gaps.length > 0) {
+    const shown = gaps.slice(0, 5);
+    parts.push(
+      `The key has no entry for question ${list(shown)}` +
+        (gaps.length > shown.length ? ` (and ${gaps.length - shown.length} more)` : '') +
+        '.',
+    );
+  }
+  if (spoilt.length > 0) {
+    const shown = spoilt.slice(0, 5).map((text) => `"${text}"`);
+    const one = spoilt.length === 1;
+    parts.push(
+      (one ? 'A number box in the key reads ' : 'Number boxes in the key read ') +
+        list(shown) +
+        (spoilt.length > shown.length ? ` (and ${spoilt.length - shown.length} more)` : '') +
+        ' - a stray character was typed after the number. Retype ' +
+        (one ? 'that box' : 'those boxes') +
+        ' as the plain number.',
+    );
+  } else {
+    parts.push('Add the missing entry to the key, or check that box for a stray character.');
+  }
+  return parts.join(' ');
 }
 
 function findAnswerKeyStart(children: readonly Element[], headings: readonly string[]): number {

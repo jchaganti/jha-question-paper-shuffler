@@ -12,7 +12,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DocxPackage } from '../src/core/docx/DocxPackage';
-import { NS, visibleText } from '../src/core/docx/xml';
+import type { Element } from '../src/core/docx/dom';
+import { NS, childElements, visibleText } from '../src/core/docx/xml';
 import { GenerationService } from '../src/core/generate/GenerationService';
 import { OptionSetParser } from '../src/core/options/OptionSetParser';
 import { NumberingIndex } from '../src/core/parse/NumberingIndex';
@@ -23,6 +24,7 @@ import {
   buildPaper,
   defaultSections,
   symbolBracketOptionParagraph,
+  symbolContentOptionParagraph,
   type FixtureQuestion,
   type FixtureSection,
 } from './support/PaperFixture';
@@ -52,6 +54,24 @@ const optionText = (block: QuestionBlock): string =>
     .map((node) => visibleText(node))
     .join(' | ')
     .replace(/\t/g, '→');
+
+/**
+ * Option text with each symbol-font character shown as the glyph it prints. Symbols carry
+ * no text of their own, so plain text alone cannot show whether one stayed with its
+ * number or was left behind in the old column.
+ */
+function optionTextWithSymbols(block: QuestionBlock): string {
+  const render = (node: Element): string => {
+    if (node.namespaceURI === NS.w && node.localName === 'sym') return 'Ω';
+    if (node.namespaceURI === NS.w && node.localName === 't') return node.textContent ?? '';
+    if (node.namespaceURI === NS.w && node.localName === 'tab') return '→';
+    return childElements(node).map(render).join('');
+  };
+  return block.nodes
+    .filter((node) => node !== block.questionParagraph && node.namespaceURI === NS.w && node.localName === 'p')
+    .map((node) => render(node).trim())
+    .join(' | ');
+}
 
 /** Multiset of words - invariant when only whole option contents are re-ordered. */
 const words = (block: QuestionBlock): string[] =>
@@ -173,6 +193,65 @@ describe('a label whose bracket is a symbol-font character', () => {
 
       expect(result.sets[0]!.verification.ok).toBe(true);
       expect(result.sets[0]!.optionsShuffled).toBe(6);
+    } finally {
+      await fs.rm(workingDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('an option whose content is a symbol', () => {
+  const paper = (): FixtureSection[] =>
+    paperWith({
+      stem: 'What is the resistance?',
+      optionParagraphs: [],
+      // "60Ω  (B) 50Ω  (C) 80Ω  (D) 100Ω" - every symbol sits right before the next label.
+      rawOptionParagraph: symbolContentOptionParagraph(['60', '50', '80', '100']),
+      answer: 'A',
+    });
+
+  it('is shuffled: a bracketed label has its bracket, so the symbol is content', async () => {
+    const { parsed } = await firstQuestion(paper());
+
+    if (!parsed.ok) throw new Error(`expected the options to parse, got ${parsed.reason}`);
+    expect(parsed.options.signatures).toEqual([
+      '60|sym:Symbol:F057',
+      '50|sym:Symbol:F057',
+      '80|sym:Symbol:F057',
+      '100|sym:Symbol:F057',
+    ]);
+  });
+
+  it('carries its symbol with it when it moves', async () => {
+    const { block, parsed } = await firstQuestion(paper());
+    if (!parsed.ok) throw new Error('expected the options to parse');
+
+    parsed.options.apply([3, 2, 1, 0]);
+
+    // Every unit stays welded to its number: "100Ω" must not become "100" next to a
+    // stray Ω left behind in the old column.
+    expect(optionTextWithSymbols(block)).toBe('(A) →100Ω→(B) →80Ω→(C) →50Ω→(D) →60Ω→');
+  });
+
+  it('survives being written out and read back', async () => {
+    const workingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'shuffler-symcontent-'));
+    try {
+      const sourceFile = path.join(workingDir, 'Paper.docx');
+      await fs.writeFile(sourceFile, await buildPaper(paper()));
+      const result = await new GenerationService().generate({
+        sourceFile,
+        shuffleQuestions: true,
+        shuffleOptions: true,
+        questionExclusions: [],
+        optionExclusions: [],
+        setCount: 1,
+        seed: 'symbol-content',
+      });
+
+      // Verification re-parses the generated file: a question the tool shuffles must still
+      // read as four options afterwards, or the shuffle was based on a boundary that the
+      // shuffle itself destroyed.
+      expect(result.sets[0]!.verification.ok).toBe(true);
+      expect(result.sets[0]!.optionsShuffled).toBe(7);
     } finally {
       await fs.rm(workingDir, { recursive: true, force: true });
     }

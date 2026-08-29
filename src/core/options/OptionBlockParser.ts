@@ -60,6 +60,8 @@ interface LabelHit {
   readonly upperCase: boolean;
   /** True when the label starts a paragraph or follows a tab - the unambiguous case. */
   readonly afterTab: boolean;
+  /** True when the opening bracket is in the text, i.e. the label read as `(A)` not `A)`. */
+  readonly bracketed: boolean;
 }
 
 /** How hard the parser is allowed to look for labels, from safest to most permissive. */
@@ -221,7 +223,10 @@ export class OptionBlockParser {
     if (located.some((range) => range === undefined)) {
       return { ok: false, reason: 'unexpected-label-sequence', detail: 'Could not align option labels with runs.' };
     }
-    const labelRanges = located as { from: number; to: number }[];
+    const labelRanges = (located as { from: number; to: number }[]).map((range, i) => ({
+      ...range,
+      bracketed: found[i]!.bracketed,
+    }));
 
     // A Word-lettered option (A) has no label atoms; its content starts at its paragraph.
     if (letteredFirstParagraph !== undefined) {
@@ -229,7 +234,7 @@ export class OptionBlockParser {
       if (start === undefined) {
         return { ok: false, reason: 'options-not-found', detail: 'Option (A) has no content.' };
       }
-      labelRanges.unshift({ from: start, to: start });
+      labelRanges.unshift({ from: start, to: start, bracketed: true });
     }
 
     const symbolLabel = symbolBeforeLabel(flat, labelRanges);
@@ -334,16 +339,21 @@ export class OptionBlockParser {
  * content. The parser cannot tell the two apart, so the question is refused rather than
  * shuffled with a guessed boundary - moving the option would leave the bracket behind.
  *
+ * The missing bracket is the whole signal, so only a label that read as `A)` is suspect. A
+ * label that read as `(A)` has its bracket, and a symbol in front of it is the previous
+ * option's content - an answer of "∞" or "°C" sitting last in its column, which after a
+ * shuffle can land in front of any label.
+ *
  * Returns the letter of the offending label, or undefined when every label is plain text.
  */
 function symbolBeforeLabel(
   flat: readonly Atom[],
-  labelRanges: readonly { from: number; to: number }[],
+  labelRanges: readonly { from: number; to: number; bracketed: boolean }[],
 ): OptionLetter | undefined {
   for (let i = 0; i < labelRanges.length; i++) {
     const range = labelRanges[i]!;
     // An option lettered by Word has no typed label, so there is no bracket to check.
-    if (range.to <= range.from) continue;
+    if (range.to <= range.from || range.bracketed) continue;
     let previous = range.from - 1;
     while (previous >= 0 && flat[previous]!.blank) previous--;
     if (previous >= 0 && flat[previous]!.symbol) return OPTION_LETTERS[i];
@@ -368,6 +378,7 @@ function findLabels(paragraphAtoms: readonly ParagraphAtoms[], pass: SearchPass)
         end: match.index + match[0].length,
         upperCase: raw === letter,
         afterTab: isLabelPosition(text, match.index, false),
+        bracketed: match[1] !== undefined,
       });
     }
   });
