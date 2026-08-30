@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Page watermark: three question papers fanned out.
+
+  Each sheet carries the same four option rows, and on each sheet a different row is
+  filled in - one paper becoming several sets, each with its own correct answer key.
+  Drawn in one stroke colour that reads on both the light and the dark page wash; how
+  faint it is belongs to the theme, so styles.css sets the opacity.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="430" viewBox="0 0 560 430">
+  <g fill="none" stroke="#4a6fc4" stroke-width="2.6" stroke-linecap="round">
+
+    <!-- Back sheet: answer on option B. -->
+    <g opacity=".34" transform="translate(16 84) rotate(-10 108 148)">
+      <rect x="1.3" y="1.3" width="215" height="295" rx="13"/>
+      <path d="M32 46h108M32 70h72"/>
+      <circle cx="38" cy="122" r="7"/><path d="M58 122h94"/>
+      <circle cx="38" cy="160" r="7" fill="#4a6fc4" stroke="none"/><path d="M58 160h120"/>
+      <circle cx="38" cy="198" r="7"/><path d="M58 198h82"/>
+      <circle cx="38" cy="236" r="7"/><path d="M58 236h106"/>
+    </g>
+
+    <!-- Middle sheet: answer on option D. -->
+    <g opacity=".5" transform="translate(154 62) rotate(-2 108 148)">
+      <rect x="1.3" y="1.3" width="215" height="295" rx="13"/>
+      <path d="M32 46h108M32 70h72"/>
+      <circle cx="38" cy="122" r="7"/><path d="M58 122h82"/>
+      <circle cx="38" cy="160" r="7"/><path d="M58 160h106"/>
+      <circle cx="38" cy="198" r="7"/><path d="M58 198h94"/>
+      <circle cx="38" cy="236" r="7" fill="#4a6fc4" stroke="none"/><path d="M58 236h120"/>
+    </g>
+
+    <!-- Front sheet: answer on option A. -->
+    <g opacity=".72" transform="translate(292 86) rotate(8 108 148)">
+      <rect x="1.3" y="1.3" width="215" height="295" rx="13"/>
+      <path d="M32 46h108M32 70h72"/>
+      <circle cx="38" cy="122" r="7" fill="#4a6fc4" stroke="none"/><path d="M58 122h120"/>
+      <circle cx="38" cy="160" r="7"/><path d="M58 160h94"/>
+      <circle cx="38" cy="198" r="7"/><path d="M58 198h106"/>
+      <circle cx="38" cy="236" r="7"/><path d="M58 236h82"/>
+    </g>
+
+  </g>
+</svg>

@@ -1,21 +1,71 @@
 :root {
-  --bg: #f4f5f7;
+  --bg: #e9edf7;
   --surface: #ffffff;
-  --border: #e2e5ea;
+  --border: #dee4f0;
   --text: #1c2024;
-  --muted: #667085;
+  --muted: #5f6a80;
   --accent: #2f6feb;
   --accent-text: #ffffff;
   --ok: #1a7f4b;
   --warn: #9a6700;
   --bad: #b42318;
   --radius: 10px;
-  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow: 0 1px 2px rgba(38, 50, 90, 0.06), 0 6px 20px rgba(38, 50, 90, 0.06);
+
+  /* Pastel page wash: three soft blooms over a periwinkle base. Cards sit on top of it
+     nearly opaque, so the colour is felt around the working area rather than inside it. */
+  --page: #eef1fa;
+  --wash-1: rgba(140, 160, 232, 0.32);
+  --wash-2: rgba(190, 158, 226, 0.26);
+  --wash-3: rgba(138, 202, 184, 0.24);
+  --card: rgba(255, 255, 255, 0.93);
+  --watermark-opacity: 0.45;
+  --watermark-tint: none;
+}
+
+/*
+ * Page colours the user picks from the Colour menu.
+ *
+ * Each palette is a block here rather than custom properties written onto the element,
+ * because the page's Content-Security-Policy (style-src 'self') allows no inline style.
+ * The renderer only sets data-palette on <html>. Periwinkle is the default and lives in
+ * :root above, so an unknown or missing value still lands on a complete palette.
+ *
+ * The watermark is drawn in one blue; --watermark-tint turns it toward each palette.
+ */
+:root[data-palette='mint'] {
+  --bg: #e6f1ec;
+  --border: #d8e8e0;
+  --page: #edf6f1;
+  --wash-1: rgba(132, 196, 170, 0.30);
+  --wash-2: rgba(160, 196, 232, 0.22);
+  --wash-3: rgba(214, 206, 160, 0.20);
+  --watermark-tint: hue-rotate(-58deg);
+}
+
+:root[data-palette='peach'] {
+  --bg: #f7e9e3;
+  --border: #f0dcd4;
+  --page: #fbf0ec;
+  --wash-1: rgba(238, 168, 142, 0.26);
+  --wash-2: rgba(226, 166, 196, 0.22);
+  --wash-3: rgba(198, 182, 232, 0.20);
+  --watermark-tint: hue-rotate(146deg);
+}
+
+:root[data-palette='sand'] {
+  --bg: #f2ebdd;
+  --border: #e7ddc9;
+  --page: #f7f2e9;
+  --wash-1: rgba(216, 190, 140, 0.28);
+  --wash-2: rgba(196, 178, 214, 0.20);
+  --wash-3: rgba(150, 192, 180, 0.20);
+  --watermark-tint: hue-rotate(172deg);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #16181d;
+    --bg: #1a1d24;
     --surface: #1e2127;
     --border: #2e333c;
     --text: #e7e9ee;
@@ -25,6 +75,45 @@
     --warn: #e0b341;
     --bad: #ff7a6e;
     --shadow: none;
+
+    --page: #14161c;
+    --wash-1: rgba(86, 108, 184, 0.22);
+    --wash-2: rgba(128, 98, 172, 0.18);
+    --wash-3: rgba(74, 138, 124, 0.16);
+    --card: rgba(30, 33, 39, 0.9);
+    --watermark-opacity: 0.3;
+    --watermark-tint: none;
+  }
+
+  /* The same four palettes over the dark base: hue kept, weight dropped right down. */
+  :root[data-palette='mint'] {
+    --bg: #1a201d;
+    --border: #2c352f;
+    --page: #141816;
+    --wash-1: rgba(88, 168, 140, 0.18);
+    --wash-2: rgba(96, 132, 180, 0.14);
+    --wash-3: rgba(168, 158, 104, 0.12);
+    --watermark-tint: hue-rotate(-58deg);
+  }
+
+  :root[data-palette='peach'] {
+    --bg: #221b19;
+    --border: #382c28;
+    --page: #1a1413;
+    --wash-1: rgba(206, 122, 92, 0.18);
+    --wash-2: rgba(186, 116, 150, 0.14);
+    --wash-3: rgba(140, 124, 184, 0.12);
+    --watermark-tint: hue-rotate(146deg);
+  }
+
+  :root[data-palette='sand'] {
+    --bg: #201d16;
+    --border: #352f24;
+    --page: #181510;
+    --wash-1: rgba(190, 158, 96, 0.18);
+    --wash-2: rgba(146, 128, 172, 0.13);
+    --wash-3: rgba(102, 148, 134, 0.13);
+    --watermark-tint: hue-rotate(172deg);
   }
 }
 
@@ -34,15 +123,52 @@
 
 body {
   margin: 0;
-  background: var(--bg);
+  background-color: var(--page);
+  background-image:
+    radial-gradient(900px 620px at 10% -10%, var(--wash-1), transparent 62%),
+    radial-gradient(780px 540px at 94% 2%, var(--wash-2), transparent 64%),
+    radial-gradient(860px 580px at 46% 112%, var(--wash-3), transparent 62%);
+  background-attachment: fixed;
   color: var(--text);
   font: 14px/1.5 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+
+/*
+ * The fanned-papers watermark, on its own layer so the theme can set how faint it is.
+ * Fixed and behind everything, so it stays put while the page scrolls and never sits
+ * between the user and a control.
+ */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: url('paper-stack.svg') no-repeat right -80px bottom -60px / 480px auto;
+  opacity: var(--watermark-opacity);
+  filter: var(--watermark-tint);
+  pointer-events: none;
+}
+
+/* Below the width where the cards stop leaving a margin, the watermark would run under
+   the controls rather than beside them. Keep it, but out of the way. */
+@media (max-width: 980px) {
+  body::before {
+    background-size: 330px auto;
+    opacity: calc(var(--watermark-opacity) * 0.45);
+  }
 }
 
 .app {
   max-width: 860px;
   margin: 0 auto;
   padding: 32px 24px 56px;
+}
+
+.app__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
 }
 
 .app__header h1 {
@@ -57,8 +183,45 @@ body {
   color: var(--muted);
 }
 
-.card {
+/* Page colour: app chrome, so it sits with the title rather than among the settings. */
+.palette {
+  flex: none;
+}
+
+.palette label {
+  margin-bottom: 4px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+select {
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+}
+
+select:focus {
+  outline: 2px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-color: var(--accent);
+}
+
+/* Stack the colour menu under the title when the window is too narrow for a row. */
+@media (max-width: 560px) {
+  .app__header {
+    flex-direction: column;
+    gap: 0;
+  }
+}
+
+.card {
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);

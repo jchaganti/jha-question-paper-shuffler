@@ -12,8 +12,15 @@ import path from 'node:path';
 
 const dir = path.resolve('dist/web/renderer');
 const html = await readFile(path.join(dir, 'index.html'), 'utf8');
-const css = await readFile(path.join(dir, 'styles.css'), 'utf8');
 const renderer = await readFile(path.join(dir, 'renderer.js'), 'utf8');
+
+// The page watermark is a linked file in the real app. The harness may be opened from a
+// path the browser will not resolve relative URLs against, so inline it like the rest.
+const watermark = await readFile(path.join(dir, 'paper-stack.svg'), 'utf8');
+const css = (await readFile(path.join(dir, 'styles.css'), 'utf8')).replace(
+  "url('paper-stack.svg')",
+  `url("data:image/svg+xml;base64,${Buffer.from(watermark).toString('base64')}")`,
+);
 if (/^\s*import\s/m.test(renderer)) {
   throw new Error('renderer.js now has runtime imports; the harness can no longer inline it.');
 }
