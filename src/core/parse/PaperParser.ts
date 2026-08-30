@@ -48,7 +48,7 @@ export class PaperParser {
     if (!answerKey) {
       throw new PaperParseError(
         'No answer key found. The tool expects a table at the end of the paper whose cells pair ' +
-          'a question number with an answer letter (A-D).',
+          'a question number with an answer - a letter (A-D), a digit (1-4) or a roman numeral (i-iv).',
       );
     }
     if (answerKey.duplicateNumbers.length > 0) {

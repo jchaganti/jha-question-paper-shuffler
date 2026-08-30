@@ -73,6 +73,15 @@ describe('supported variations', () => {
     expect(parsed.ok).toBe(true);
   });
 
+  it('accepts an answer key whose letters are bracketed, e.g. "(A)"', async () => {
+    // Detailed coverage of every key format lives in answerKeyFormats.test.ts; this pins
+    // the README row, because a bracketed key used to be a hard error.
+    const run = await patched((xml) =>
+      xml.replace(/<w:t>([A-D])<\/w:t>/g, (_match, letter: string) => `<w:t>(${letter})</w:t>`),
+    );
+    expect(run().answerKey.answerOf(3)).toBe('C');
+  });
+
   it('treats a paper with no subject headings as a single subject', async () => {
     const [physics, chemistry] = defaultSections();
     const paper = await parse(
@@ -131,13 +140,6 @@ describe('hard failures (explained, never silent)', () => {
     );
     expect(run).toThrow(PaperParseError);
     expect(run).toThrow(/Could not identify the question numbering|Found 0 numbered questions/);
-  });
-
-  it('rejects an answer key whose letters are bracketed, e.g. "(A)"', async () => {
-    const run = await patched((xml) =>
-      xml.replace(/<w:t>([A-D])<\/w:t>/g, (_match, letter: string) => `<w:t>(${letter})</w:t>`),
-    );
-    expect(run).toThrow(/No answer key found/);
   });
 
   it('rejects a paper whose subjects restart numbering at 1', async () => {

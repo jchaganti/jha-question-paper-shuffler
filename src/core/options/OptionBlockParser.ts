@@ -43,20 +43,55 @@ export type OptionParseResult =
   | { readonly ok: false; readonly reason: SkipReason; readonly detail: string };
 
 /**
- * Labels are detected up to (E) even though only four are supported, so that a
- * five-option question is *refused* instead of having its "(E) ..." text silently
- * folded into option (D) and moved around with it.
+ * The ways a paper labels its four options. A paper picks one and uses it throughout, so
+ * the reader deduces which one from the question in front of it rather than assuming a
+ * house style: letters `(A)`, digits `(1)`, or roman numerals `(i)`.
+ *
+ * Every scheme carries a fifth token even though only four options are supported, so that
+ * a five-option question is *refused* instead of having its fifth option silently folded
+ * into the fourth and moved around with it.
  */
-const UPPER_LABEL_RE = /\(([A-E])\)|([A-E])\)/g;
-const LOWER_LABEL_RE = /\(([a-e])\)|([a-e])\)/g;
-const ANY_LABEL_RE = /\(([A-Ea-e])\)|([A-Ea-e])\)/g;
+type LabelScheme = 'upperLetter' | 'lowerLetter' | 'anyLetter' | 'digit' | 'lowerRoman' | 'upperRoman';
+
+/** Maps a label token as typed to the option slot it names, 0-based. */
+const SCHEME_TOKENS: Record<LabelScheme, readonly string[]> = {
+  upperLetter: ['A', 'B', 'C', 'D', 'E'],
+  lowerLetter: ['a', 'b', 'c', 'd', 'e'],
+  anyLetter: ['A', 'B', 'C', 'D', 'E'],
+  digit: ['1', '2', '3', '4', '5'],
+  lowerRoman: ['i', 'ii', 'iii', 'iv', 'v'],
+  upperRoman: ['I', 'II', 'III', 'IV', 'V'],
+};
+
+/** `(X)` or `X)`. Roman alternatives are longest-first so "iv)" never reads as "i". */
+const SCHEME_PATTERNS: Record<LabelScheme, RegExp> = {
+  upperLetter: /\(([A-E])\)|([A-E])\)/g,
+  lowerLetter: /\(([a-e])\)|([a-e])\)/g,
+  anyLetter: /\(([A-Ea-e])\)|([A-Ea-e])\)/g,
+  digit: /\(([1-5])\)|([1-5])\)/g,
+  lowerRoman: /\((iii|iv|ii|i|v)\)|(iii|iv|ii|i|v)\)/g,
+  upperRoman: /\((III|IV|II|I|V)\)|(III|IV|II|I|V)\)/g,
+};
+
+/** The slot a label token names, or undefined when the token belongs to another scheme. */
+function slotOf(scheme: LabelScheme, raw: string): number | undefined {
+  const token = scheme === 'anyLetter' ? raw.toUpperCase() : raw;
+  const index = SCHEME_TOKENS[scheme].indexOf(token);
+  return index >= 0 ? index : undefined;
+}
+
+const LETTER_SCHEMES: readonly LabelScheme[] = ['upperLetter', 'lowerLetter', 'anyLetter'];
 
 interface LabelHit {
   readonly paragraphIndex: number;
   readonly letter: OptionLetter;
   readonly start: number;
   readonly end: number;
-  /** The label as typed: `(A)` upper case, `(a)` lower case. */
+  /** The scheme this label was read under - which family of token it is written in. */
+  readonly scheme: LabelScheme;
+  /** The token exactly as the page writes it - "A", "1", "iii" - for error messages. */
+  readonly raw: string;
+  /** The label as typed: `(A)` upper case, `(a)` lower case. Letter schemes only. */
   readonly upperCase: boolean;
   /** True when the label starts a paragraph or follows a tab - the unambiguous case. */
   readonly afterTab: boolean;
@@ -66,18 +101,32 @@ interface LabelHit {
 
 /** How hard the parser is allowed to look for labels, from safest to most permissive. */
 interface SearchPass {
-  readonly pattern: RegExp;
+  readonly scheme: LabelScheme;
   readonly relaxed: boolean;
-  readonly description: string;
 }
 
+/**
+ * Tried in order, first clean A,B,C,D wins.
+ *
+ * Letters come before digits and digits before roman numerals, because that is the order
+ * of decreasing certainty that a run of labels really is the *options*. A question often
+ * lists items as `(i)...(iv)` or `(a)...(d)` above answers written another way, so the
+ * scheme most likely to be the answers is asked first and the most easily confused with an
+ * item list is asked last.
+ */
 const SEARCH_PASSES: readonly SearchPass[] = [
-  { pattern: UPPER_LABEL_RE, relaxed: false, description: 'upper case, after a tab' },
-  { pattern: UPPER_LABEL_RE, relaxed: true, description: 'upper case, after punctuation' },
-  { pattern: LOWER_LABEL_RE, relaxed: false, description: 'lower case, after a tab' },
-  { pattern: LOWER_LABEL_RE, relaxed: true, description: 'lower case, after punctuation' },
-  { pattern: ANY_LABEL_RE, relaxed: false, description: 'either case, after a tab' },
-  { pattern: ANY_LABEL_RE, relaxed: true, description: 'either case, after punctuation' },
+  { scheme: 'upperLetter', relaxed: false },
+  { scheme: 'upperLetter', relaxed: true },
+  { scheme: 'lowerLetter', relaxed: false },
+  { scheme: 'lowerLetter', relaxed: true },
+  { scheme: 'anyLetter', relaxed: false },
+  { scheme: 'anyLetter', relaxed: true },
+  { scheme: 'digit', relaxed: false },
+  { scheme: 'digit', relaxed: true },
+  { scheme: 'lowerRoman', relaxed: false },
+  { scheme: 'lowerRoman', relaxed: true },
+  { scheme: 'upperRoman', relaxed: false },
+  { scheme: 'upperRoman', relaxed: true },
 ];
 
 /**
@@ -190,7 +239,8 @@ export class OptionBlockParser {
       });
     }
 
-    if (found.length > 1 && found.some((hit) => hit.upperCase !== found[0]!.upperCase)) {
+    const letterLabels = found.filter((hit) => LETTER_SCHEMES.includes(hit.scheme));
+    if (letterLabels.length === found.length && found.length > 1 && found.some((hit) => hit.upperCase !== found[0]!.upperCase)) {
       notes.push({
         issue: 'mixed-label-case',
         detail:
@@ -291,14 +341,22 @@ export class OptionBlockParser {
     };
   }
 
-  /** Explains, in the user's terms, why none of the passes worked. */
+  /**
+   * Explains, in the user's terms, why none of the passes worked.
+   *
+   * The report quotes the labels in the scheme that came closest, and in the tokens the
+   * page actually writes, so the author is not told about "(A)...(D)" when their paper is
+   * written "(1)...(4)".
+   */
   private explainFailure(block: QuestionBlock, baseAtoms: readonly ParagraphAtoms[]): OptionParseResult {
-    const strict = findLabels(baseAtoms, { pattern: ANY_LABEL_RE, relaxed: false, description: '' });
+    const best = SEARCH_PASSES.filter((pass) => !pass.relaxed)
+      .map((pass) => findLabels(baseAtoms, pass))
+      .reduce((a, b) => (b.length > a.length ? b : a), [] as LabelHit[]);
 
-    if (strict.length === 0) {
+    if (best.length === 0) {
       const tableHasLabels = block.nodes
         .filter((node) => node.namespaceURI === NS.w && node.localName === 'tbl')
-        .some((table) => /\(\s*[ABCDabcd]\s*\)/.test(visibleText(table)));
+        .some((table) => /\(\s*([ABCDabcd]|[1-4]|i{1,3}|iv)\s*\)/.test(visibleText(table)));
       if (tableHasLabels) {
         return { ok: false, reason: 'options-inside-table', detail: 'Option labels were found inside a table.' };
       }
@@ -312,7 +370,7 @@ export class OptionBlockParser {
     // A floating picture in the option area is the usual reason a label goes unrecognised:
     // the picture's text box sits in front of it. Say that rather than "unexpected labels".
     const hasFloatingGraphic = baseAtoms.some((entry) => entry.atoms.some((atom) => atom.floatingGraphic));
-    const sequence = strict.map((hit) => hit.letter).join('');
+    const sequence = best.map((hit) => hit.raw).join('');
     if (hasFloatingGraphic) {
       return {
         ok: false,
@@ -323,10 +381,11 @@ export class OptionBlockParser {
       };
     }
 
+    const expected = SCHEME_TOKENS[best[0]!.scheme].slice(0, 4).join(',');
     return {
       ok: false,
       reason: 'unexpected-label-sequence',
-      detail: `Expected labels A,B,C,D but found "${sequence}".`,
+      detail: `Expected labels ${expected} but found "${sequence}".`,
     };
   }
 }
@@ -363,20 +422,26 @@ function symbolBeforeLabel(
 
 function findLabels(paragraphAtoms: readonly ParagraphAtoms[], pass: SearchPass): LabelHit[] {
   const found: LabelHit[] = [];
+  const pattern = SCHEME_PATTERNS[pass.scheme];
   paragraphAtoms.forEach((entry, paragraphIndex) => {
     const text = entry.atoms.map((atom) => atom.text).join('');
-    pass.pattern.lastIndex = 0;
+    pattern.lastIndex = 0;
     let match: RegExpExecArray | null;
-    while ((match = pass.pattern.exec(text)) !== null) {
+    while ((match = pattern.exec(text)) !== null) {
       const raw = match[1] ?? match[2] ?? '';
-      const letter = raw.toUpperCase() as OptionLetter;
+      const slot = slotOf(pass.scheme, raw);
+      if (slot === undefined) continue;
       if (!isLabelPosition(text, match.index, pass.relaxed)) continue;
       found.push({
         paragraphIndex,
-        letter,
+        // Slots are named A-D throughout the tool whatever the paper writes on the page;
+        // the label atoms themselves are never moved, so the page keeps its own tokens.
+        letter: OPTION_LETTERS[slot] ?? ('E' as OptionLetter),
         start: match.index,
         end: match.index + match[0].length,
-        upperCase: raw === letter,
+        scheme: pass.scheme,
+        raw,
+        upperCase: raw === raw.toUpperCase(),
         afterTab: isLabelPosition(text, match.index, false),
         bracketed: match[1] !== undefined,
       });

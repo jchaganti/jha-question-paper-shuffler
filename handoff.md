@@ -204,6 +204,44 @@ Commits, oldest first:
 
 ---
 
+### This session (option/answer format deduction)
+
+9. **The option label scheme and the answer-key answer style are now deduced from the
+   paper instead of assumed.** The user's instruction: *"do not assume any format in the
+   code. Deduce it based on what is there in the input paper and use it."*
+
+   - **Answer key** (`AnswerKeyTable.ts`). An answer box may name its option by letter
+     (`A`, `(A)`, `a.`), by position as a digit (`1`, `2.`) or by position as a roman
+     numeral (`iii)`, `(IV)`). `parseAnswerCellText` records the scheme, case and
+     decoration per box; `setAnswer` renders the new answer back through
+     `renderAnswerCellText`, so the key keeps the style its author used. A bracketed key
+     used to be a **hard error** and is now supported.
+   - **Option labels** (`OptionBlockParser.ts`). The letter-only regex trio became
+     `SCHEME_TOKENS` / `SCHEME_PATTERNS` over six schemes. `SEARCH_PASSES` runs them
+     upper-letter → lower-letter → any-letter → digit → lower-roman → upper-roman, each
+     strict-then-relaxed. Slots stay named A–D internally; labels are never moved, so the
+     page keeps its own tokens.
+
+   **Why that pass order matters.** It is the whole defence against reading an *item* list
+   as the options. Questions routinely list items as `(i)…(iv)` or `(a)…(d)` above answers
+   written another way, so the scheme most easily confused with an item list is asked last
+   and only wins when nothing better yields a clean run of four. `optionLabelFormats.test.ts`
+   pins both directions.
+
+   **Key detection needed a matching guard.** Accepting digits as answers meant any grid of
+   number pairs could read as a key — and `findAnswerKeyStart` scans individual tables.
+   `AnswerKeyTable.scan` now tallies the schemes of a table's candidate pairs and keeps
+   only the majority scheme, because a real key names its options one way throughout. A box
+   dropped this way surfaces through the existing `gaps` check, which names the question.
+
+   **Result: `FST-1-Rep-2024` was never missing a key.** It writes its answers as digits
+   `1`–`4` and labels its options `(1)`–`(4)` — the filename even says `1-2-3-4`. It went
+   from *blocked* to 200 questions, **166 options shuffled, verification PASSED**. Every
+   other paper's *options shuffled* count is unchanged from §6, which is the check that
+   proves no false-positive refusal appeared and no check stopped firing.
+
+   190 tests, 15 files. New: `answerKeyFormats.test.ts`, `optionLabelFormats.test.ts`.
+
 ## 5 · Decisions worth not relitigating
 
 | Decision | Why |
@@ -213,6 +251,9 @@ Commits, oldest first:
 | `splitLeadCorePad` kept | Justified by measurement, not taste: without it four clean papers lost characters |
 | Loose-signature verifier fallback **reverted** | It made a defective document report PASSED — the exact failure mode verification exists to prevent |
 | Symbol check keyed on the *missing bracket*, not on the symbol | The missing bracket is the actual signal; keying on the symbol punishes legitimate `60Ω` options |
+| Option schemes tried letters → digits → roman | Order of decreasing certainty that a run of labels is the *options*; an `(i)…(iv)` item list must never outrank real answers |
+| A key table must use one answer scheme throughout | It is what separates an answer key from any other grid of numbers, now that digits are valid answers |
+| Slots stay named A–D internally whatever the page writes | One canonical vocabulary for permutations and the key; labels are never moved, so the page keeps its own tokens regardless |
 | Palettes as CSS blocks + one attribute | CSP allows no inline style; also keeps all colour in one file |
 | Watermark on `body::before`, not `body` | Lets the theme control its opacity and tint independently of the wash |
 
@@ -220,8 +261,7 @@ Commits, oldest first:
 
 ## 6 · Current state
 
-- **160 tests pass**, 13 files. `npx vitest run`.
-- Working tree clean at `5719b9d`.
+- **190 tests pass**, 15 files. `npx vitest run`.
 - Renderer type-checks; UI harness builds; Electron launches clean.
 
 ### Paper corpus (`C:\ps\q-paper`)
@@ -237,8 +277,8 @@ Commits, oldest first:
 | MTP-2-XI-2023 | 200 | 155 | Works (32 genuine symbol-bracket questions skipped) |
 | Nano MTP 2 Physics | 12 | 9 | Works |
 | Nano MTP Chemistry-1 | 12 | 12 | Works |
-| Alternating Current XII-2024 | 100 | 93 | **One cell edit away** — retype `57,` as `57.` |
-| FST-1-Rep-2024 | — | — | Blocked: no answer key table in the document |
+| Alternating Current XII-2024 | 100 | 93 | Works — the `57,` box has since been retyped in Word |
+| FST-1-Rep-2024 | 200 | 166 | Works — unblocked by the format deduction below |
 | CURRENT ELECTRICITY (Wheatstone) | — | — | Blocked: question numbers typed by hand |
 
 ---
@@ -288,19 +328,20 @@ CSP forbids an inline script, so the palette is applied by the deferred module s
 non-default choice can show one frame of Periwinkle. Fix if wanted: have the main process
 substitute the saved palette into the `<html>` tag before loading the page. Cosmetic.
 
-### 3. Two papers unsupported by design
+### 3. One paper unsupported by design
 
-`FST-1-Rep-2024` has no key table; `CURRENT ELECTRICITY` has hand-typed numbers. Both are
-correctly refused with clear messages. Decide whether to support either, or document them
-as out of scope permanently.
+`CURRENT ELECTRICITY` has hand-typed question numbers and is correctly refused with a clear
+message. Decide whether to support it, or document it as out of scope permanently.
+
+(`FST-1-Rep-2024` used to sit here as "no key table". It was never missing a key: its key
+writes answers as digits `1`–`4` and its options are labelled `(1)`–`(4)`. Both are now
+deduced, and the paper works.)
 
 ---
 
 ## 8 · Exact next steps
 
-1. **Tell the user to retype the `57,` box in *Alternating Current*** as `57.`, in Word,
-   then re-run. Nothing to code. (Note: they had that file open in Word — a `~$…` lock
-   file appeared in `C:\ps\q-paper` mid-session.)
+1. ~~Retype the `57,` box in *Alternating Current*.~~ Done in Word; that paper now works.
 2. **Get a decision on open issue 1**, then implement — most likely (a), a post-apply
    re-parse with rollback in `SetBuilder`/`OptionShuffleApplier`, plus a new `SkipReason`
    such as `'shuffle-would-break-labels'`, a fixture test, and a full corpus re-run.

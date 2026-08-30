@@ -385,9 +385,17 @@ clear error message when they do not hold.
    paper without such headings is treated as one single subject, and shuffling then spans
    the whole paper.
 3. **The paper ends with an answer key** introduced by an `ANSWER KEY` paragraph (or, as a
-   fallback, the first table whose cells pair a number with a letter A–D). The key must
+   fallback, the first table whose cells pair a number with an answer). The key must
    cover every question exactly once; the number of key entries is what defines the
    question count. Everything from the `ANSWER KEY` heading onwards is never shuffled.
+
+   An answer box may name its option by letter (`A`, `(A)`, `a.`), by position as a digit
+   (`1`, `2.`) or by position as a roman numeral (`iii)`, `(IV)`). The style is read off
+   the box itself and the new answer is written back in that same style, so a key comes
+   back written the way its author wrote it. A key names its options one way throughout,
+   so the style used by most of its boxes is taken as that table's style and a box written
+   another way is not read — which is also what tells an answer key apart from any other
+   grid of numbers in the document.
 
    A number box may be written `1`, `1.` or `1)` — the ordinal punctuation authors
    habitually type names question 1 and nothing else, so all three are read. Anything else
@@ -405,9 +413,19 @@ clear error message when they do not hold.
 6. **A typed option label is `(A)`/`A)` at the start of a paragraph or straight after a
    tab** — and, failing that, after a space whose preceding character is not alphanumeric
    (papers do lose the tab: `…(i), (iv) and (v) (D) …`). Requiring a non-letter is what lets
-   `(C) Both (A) and (B)`, `Assertion (A):` and `1s22s2(C)` be read correctly. Labels are
-   looked for in upper case first, then lower case, so a match-the-columns question that
-   lists items as `(a)…(d)` and answers as `(A)…(D)` yields the answers.
+   `(C) Both (A) and (B)`, `Assertion (A):` and `1s22s2(C)` be read correctly.
+
+   The label *scheme* is deduced per question rather than assumed: letters `(A)…(D)`,
+   digits `(1)…(4)`, or roman numerals `(i)…(iv)`. Schemes are tried in order of
+   decreasing certainty that a run of labels really is the options — upper-case letters,
+   lower-case letters, either case, digits, then roman numerals — and the first that
+   yields a clean run of four wins. That ordering is what makes a match-the-columns
+   question work: one that lists items as `(a)…(d)` and answers as `(A)…(D)` yields the
+   answers, and one that lists items as `(i)…(iv)` and answers as `(1)…(4)` also yields
+   the answers. Whichever scheme is found, the labels themselves are never moved, so each
+   generated set keeps the tokens its author typed. Every scheme also recognises its fifth
+   label, so a five-option question is refused rather than having its fifth option folded
+   into the fourth.
 7. **Options may be lettered by Word instead of typed** — either all four (four list
    paragraphs, first is (A)), or just the first, with `(B)`, `(C)`, `(D)` typed; in the
    latter case a single-item lettered list at or before `(B)` is option (A). A question may also carry a lettered
@@ -462,6 +480,8 @@ That is the answer for a specific paper. In general:
 | `.doc` (Word 97-2003 binary) | **Rejected.** Save as `.docx` first. |
 | Continuous numbering across subjects, one or several Word lists | Supported (both sample formats). |
 | Labels `(A)` / `A)` / `(a)` | Supported. |
+| Labels written as digits `(1)…(4)` or `1)…4)` | Supported — the scheme is deduced from the question and the labels stay as typed. |
+| Labels written as roman numerals `(i)…(iv)` or `(I)…(IV)` | Supported — tried after letters and digits, so an item list is not mistaken for the options. |
 | 1, 2 or 4 options per line, or one option per paragraph | Supported. |
 | Options with equations, superscripts, symbols, inline images | Supported - the run moves with its content. |
 | Stem spread over several paragraphs, match-the-columns tables, diagrams | Supported - they travel with the question. |
@@ -478,16 +498,18 @@ That is the answer for a specific paper. In general:
 | A label whose opening bracket was put in with *Insert → Symbol* | Question keeps its option order and is listed in the report. |
 | An option whose *content* is a symbol (`60Ω`, `15°`), sitting right before the next label | Supported - the label has its own bracket, so the symbol is content and moves with it. |
 | Answer key numbers written `1.` or `1)` | Supported. |
+| Answer key answers written `A`, `(A)`, `a`, `1`, `2.`, `iii)` or `(IV)` | Supported — the key's own style is deduced and the new answer is written back in it. |
 | Question numbers typed by hand instead of Word numbering | **Hard error** naming the lists it did find. |
 | Each subject restarting numbering at 1 | **Hard error** - a key entry would no longer identify one question. |
-| Answer key missing, bracketed (`(A)`), or with number and letter in one cell | **Hard error** - the key is not detected. |
+| Answer key missing, or with number and answer in one cell | **Hard error** - the key is not detected. |
 | A stray character in a key number box (`57,`) | **Hard error** naming the box to retype - the key is one answer short. |
 | Fewer than five questions | **Hard error** - too small to recognise a key table. |
 
 The design rule behind that table: the tool either does the right thing, refuses one
 question and says so, or refuses the whole paper and says why. It is not designed to
 guess. `tests/variations.test.ts`, `tests/autoLetteredOptions.test.ts` and
-`tests/labelHeuristics.test.ts` lock each row above in place.
+`tests/labelHeuristics.test.ts`, `tests/optionLabelFormats.test.ts` and
+`tests/answerKeyFormats.test.ts` lock each row above in place.
 
 The one case self-verification cannot catch is a paper structured so differently that the
 *parse itself* is wrong in a consistent way (verification re-uses the same parser). That is

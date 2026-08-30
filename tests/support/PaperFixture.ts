@@ -128,6 +128,39 @@ export const floatingPictureOptionParagraph = (label: string): string =>
   `<w:r><w:drawing><wp:anchor distT="0" distB="0"><wp:extent cx="100" cy="100"/></wp:anchor></w:drawing></w:r>` +
   `<w:r><w:t>diagram</w:t></w:r></w:p>`;
 
+/** How a fixture writes the answer letter into its key cells. Defaults to a bare letter. */
+export type AnswerKeyAnswerFormat =
+  | 'letter'
+  | 'letter-lower'
+  | 'letter-bracketed'
+  | 'digit'
+  | 'digit-dot'
+  | 'roman'
+  | 'roman-bracketed';
+
+const ANSWER_INDEX: Record<'A' | 'B' | 'C' | 'D', number> = { A: 0, B: 1, C: 2, D: 3 };
+const ROMAN_NUMERALS = ['i', 'ii', 'iii', 'iv'];
+
+function formatAnswer(answer: 'A' | 'B' | 'C' | 'D', format?: AnswerKeyAnswerFormat): string {
+  const index = ANSWER_INDEX[answer];
+  switch (format) {
+    case 'letter-lower':
+      return answer.toLowerCase();
+    case 'letter-bracketed':
+      return `(${answer})`;
+    case 'digit':
+      return `${index + 1}`;
+    case 'digit-dot':
+      return `${index + 1}.`;
+    case 'roman':
+      return `${ROMAN_NUMERALS[index]})`;
+    case 'roman-bracketed':
+      return `(${ROMAN_NUMERALS[index]})`;
+    default:
+      return answer;
+  }
+}
+
 function answerKeyTable(
   entries: readonly { number: number; answer: string }[],
   columns: number,
@@ -144,7 +177,8 @@ function answerKeyTable(
     const cells: string[] = [];
     for (let column = 0; column < columns; column++) {
       const entry = entries[column * rowCount + row];
-      cells.push(cell(entry ? numberText(entry.number) : ''), cell(entry ? entry.answer : ''));
+      const answerText = entry ? formatAnswer(entry.answer as 'A' | 'B' | 'C' | 'D', options.answerKeyAnswerFormat) : '';
+      cells.push(cell(entry ? numberText(entry.number) : ''), cell(answerText));
     }
     rows.push(`<w:tr>${cells.join('')}</w:tr>`);
   }
@@ -171,6 +205,8 @@ export interface FixtureOptions {
   readonly answerKeyNumberSuffix?: string;
   /** Key numbers to spoil with a stray comma, as a mistyped "57," in place of "57.". */
   readonly spoiltKeyNumbers?: readonly number[];
+  /** How the key writes its answer - bare letter, bracketed, digit, roman numeral, ... */
+  readonly answerKeyAnswerFormat?: AnswerKeyAnswerFormat;
 }
 
 /** A paragraph with no properties, for building raw XML in tests. */
