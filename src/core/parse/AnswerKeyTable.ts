@@ -1,89 +1,24 @@
-import { OPTION_LETTERS, type OptionLetter } from '../../shared/types';
+import type { OptionLetter } from '../../shared/types';
+import {
+  PLAIN_LETTER_STYLE,
+  parseAnswer,
+  renderAnswer,
+  type AnswerScheme,
+  type AnswerStyle,
+} from '../../shared/answerStyle';
 import type { Element } from '../docx/dom';
 import { NS, childElements, createElement, descendants, isElement, ownerDocumentOf, visibleText } from '../docx/xml';
-
-/** The family of symbol a key uses to name one of the four options. */
-type AnswerCellScheme = 'letter' | 'digit' | 'roman';
-
-/**
- * How one key box writes its answer, read off that exact box: which family of symbol
- * ("A", "1", "iv"), which case, and whatever decoration surrounds it ("(A)", "1.").
- * Recorded once per box, at parse time, so the new answer can be written back in the same
- * style the author already used - the tool never picks a house style of its own.
- */
-interface AnswerCellFormat {
-  readonly scheme: AnswerCellScheme;
-  readonly upperCase: boolean;
-  readonly prefix: string;
-  readonly suffix: string;
-}
 
 interface LetterCellRef {
   readonly questionNumber: number;
   readonly cell: Element;
-  readonly format: AnswerCellFormat;
+  readonly style: AnswerStyle;
 }
 
 /** What one table's cells turned out to hold. */
 interface TableScan {
   readonly pairs: LetterCellRef[];
   readonly spoiltNumbers: string[];
-}
-
-/** "i", "ii", "iii", "iv" - the roman numerals a key uses for options A-D, lower case. */
-const ROMAN_BY_INDEX = ['i', 'ii', 'iii', 'iv'] as const;
-
-/**
- * Reads one answer box, deducing how *that* box names an option rather than assuming a
- * house style: a bare or decorated letter ("A", "(A)", "a."), a digit naming the option's
- * position ("1", "2)"), or a roman numeral doing the same ("iii)", "(IV)"). Returns the
- * canonical A-D letter plus the exact decoration found, so `setAnswer` can reproduce it.
- */
-function parseAnswerCellText(raw: string): { letter: OptionLetter; format: AnswerCellFormat } | undefined {
-  const text = raw.trim();
-  if (!text) return undefined;
-
-  const bracketed = /^\((.+)\)$/.exec(text);
-  const prefix = bracketed ? '(' : '';
-  const suffix = bracketed ? ')' : (/[.)]$/.exec(text)?.[0] ?? '');
-  const core = (bracketed ? bracketed[1]! : suffix ? text.slice(0, -suffix.length) : text).trim();
-
-  if (/^[A-Da-d]$/.test(core)) {
-    return {
-      letter: core.toUpperCase() as OptionLetter,
-      format: { scheme: 'letter', upperCase: core === core.toUpperCase(), prefix, suffix },
-    };
-  }
-  if (/^[1-4]$/.test(core)) {
-    return {
-      letter: OPTION_LETTERS[Number(core) - 1]!,
-      format: { scheme: 'digit', upperCase: true, prefix, suffix },
-    };
-  }
-  const romanIndex = ROMAN_BY_INDEX.indexOf(core.toLowerCase() as (typeof ROMAN_BY_INDEX)[number]);
-  if (romanIndex >= 0) {
-    return {
-      letter: OPTION_LETTERS[romanIndex]!,
-      format: { scheme: 'roman', upperCase: core === core.toUpperCase(), prefix, suffix },
-    };
-  }
-  return undefined;
-}
-
-/** Renders `letter` in the exact scheme, case and decoration `format` was read from. */
-function renderAnswerCellText(letter: OptionLetter, format: AnswerCellFormat): string {
-  const index = OPTION_LETTERS.indexOf(letter);
-  const core =
-    format.scheme === 'digit'
-      ? String(index + 1)
-      : format.scheme === 'roman'
-        ? format.upperCase
-          ? ROMAN_BY_INDEX[index]!.toUpperCase()
-          : ROMAN_BY_INDEX[index]!
-        : format.upperCase
-          ? letter
-          : letter.toLowerCase();
-  return `${format.prefix}${core}${format.suffix}`;
 }
 
 /**
@@ -110,13 +45,20 @@ const SPOILT_NUMBER_RE = /^\d{1,4}\s*\S+$/;
  * original table's geometry, borders, spans and fonts exactly.
  */
 export class AnswerKeyTable {
-  private readonly cells = new Map<number, { cell: Element; format: AnswerCellFormat }>();
+  private readonly cells = new Map<number, { cell: Element; style: AnswerStyle }>();
 
   /** Question numbers the key lists more than once - a sign of per-subject numbering. */
   readonly duplicateNumbers: number[] = [];
 
   /** Number boxes spoilt by a stray character, verbatim - e.g. `["57,"]`. */
   readonly spoiltNumbers: string[] = [];
+
+  /**
+   * How this paper names an option, taken from the key's own boxes. Everything shown back
+   * to the user - the rewritten key cells and the generation report - is rendered through
+   * it, so the tool never reports an answer as "A" to a paper that writes "(1)".
+   */
+  readonly style: AnswerStyle;
 
   private constructor(readonly tables: readonly Element[], scans: readonly TableScan[]) {
     for (const scan of scans) {
@@ -127,10 +69,14 @@ export class AnswerKeyTable {
           }
           continue;
         }
-        this.cells.set(ref.questionNumber, { cell: ref.cell, format: ref.format });
+        this.cells.set(ref.questionNumber, { cell: ref.cell, style: ref.style });
       }
       this.spoiltNumbers.push(...scan.spoiltNumbers);
     }
+    // Boxes agree on the scheme by construction (see `scan`), so the first entry in
+    // question order speaks for the key as a whole.
+    const first = this.cells.get(this.questionNumbers[0] ?? -1);
+    this.style = first?.style ?? PLAIN_LETTER_STYLE;
     this.duplicateNumbers.sort((a, b) => a - b);
     // A key is laid out in columns, so scan order is not question order. Report the boxes
     // in the order the author will look for them.
@@ -179,7 +125,7 @@ export class AnswerKeyTable {
   answerOf(questionNumber: number): OptionLetter | undefined {
     const entry = this.cells.get(questionNumber);
     if (!entry) return undefined;
-    return parseAnswerCellText(visibleText(entry.cell).trim())?.letter;
+    return parseAnswer(visibleText(entry.cell).trim())?.letter;
   }
 
   /**
@@ -190,7 +136,7 @@ export class AnswerKeyTable {
   setAnswer(questionNumber: number, letter: OptionLetter): void {
     const entry = this.cells.get(questionNumber);
     if (!entry) throw new Error(`Answer key has no cell for question ${questionNumber}`);
-    const text = renderAnswerCellText(letter, entry.format);
+    const text = renderAnswer(letter, entry.style);
     const textNodes = descendants(entry.cell, NS.w, 't');
     if (textNodes.length === 0) {
       AnswerKeyTable.injectLetter(entry.cell, text);
@@ -231,12 +177,12 @@ export class AnswerKeyTable {
     for (const row of childElements(table, NS.w, 'tr')) {
       const cells = childElements(row, NS.w, 'tc');
       for (let i = 0; i + 1 < cells.length; i++) {
-        const parsed = parseAnswerCellText(visibleText(cells[i + 1]!).trim());
+        const parsed = parseAnswer(visibleText(cells[i + 1]!).trim());
         if (!parsed) continue;
         const numberText = visibleText(cells[i]!).trim();
         const match = NUMBER_RE.exec(numberText);
         if (match) {
-          candidates.push({ questionNumber: Number(match[1]), cell: cells[i + 1]!, format: parsed.format });
+          candidates.push({ questionNumber: Number(match[1]), cell: cells[i + 1]!, style: parsed.style });
           i++; // the answer cell cannot also start a pair
           continue;
         }
@@ -245,10 +191,10 @@ export class AnswerKeyTable {
       }
     }
 
-    const tally = new Map<AnswerCellScheme, number>();
-    for (const ref of candidates) tally.set(ref.format.scheme, (tally.get(ref.format.scheme) ?? 0) + 1);
+    const tally = new Map<AnswerScheme, number>();
+    for (const ref of candidates) tally.set(ref.style.scheme, (tally.get(ref.style.scheme) ?? 0) + 1);
     const scheme = [...tally.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-    return { pairs: candidates.filter((ref) => ref.format.scheme === scheme), spoiltNumbers };
+    return { pairs: candidates.filter((ref) => ref.style.scheme === scheme), spoiltNumbers };
   }
 }
 

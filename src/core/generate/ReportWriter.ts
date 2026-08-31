@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { questionsWithLayoutNotes } from '../../shared/layoutNotes';
+import { renderAnswer } from '../../shared/answerStyle';
 import type { GenerationRequest, GenerationResult } from '../../shared/types';
 
 export const REPORT_FILE_NAME = '_generation-report.md';
@@ -23,7 +24,8 @@ export class ReportWriter {
 
     lines.push('# Question set generation report', '');
     lines.push(`- Source paper: \`${request.sourceFile}\``);
-    lines.push(`- Generated: ${new Date().toISOString()}`);
+    // The run's own timestamp, the same one carried in every set's file name.
+    lines.push(`- Generated: ${result.generatedAt}`);
     lines.push(`- Sets: ${result.sets.length}`);
     lines.push(
       `- Seed: \`${result.seed}\`` +
@@ -108,11 +110,15 @@ export class ReportWriter {
         lines.push(`  - ${check.ok ? 'ok' : 'FAILED'} - ${check.name} (${check.detail})`);
       }
       lines.push('');
+      // Answers are named the way the paper names them, so this table can be read straight
+      // against the generated set's key - never "A" for a paper that writes "(1)".
       lines.push('| New Q | Was Q | Original answer | New answer | Option mapping |');
       lines.push('| --- | --- | --- | --- | --- |');
       for (const mapping of set.mappings) {
+        const was = renderAnswer(mapping.originalAnswer, paper.answerStyle);
+        const now = renderAnswer(mapping.newAnswer, paper.answerStyle);
         lines.push(
-          `| ${mapping.newNumber} | ${mapping.originalNumber} | ${mapping.originalAnswer} | ${mapping.newAnswer} | ${mapping.optionMapping || '(kept)'} |`,
+          `| ${mapping.newNumber} | ${mapping.originalNumber} | ${was} | ${now} | ${mapping.optionMapping || '(kept)'} |`,
         );
       }
       lines.push('');

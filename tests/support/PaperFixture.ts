@@ -41,6 +41,11 @@ export interface FixtureQuestion {
    * as typed labels - the "(A) is lettered by Word, (B)(C)(D) are typed" shape.
    */
   readonly letteredFirstOption?: boolean;
+  /**
+   * Emit only the option at this index as an auto-lettered list item, leaving the rest as
+   * typed labels - the "(A), (B), (D) typed and Word letters the (C)" shape.
+   */
+  readonly letteredOptionIndex?: number;
   /** Raw XML injected as an extra option paragraph (e.g. an OLE object or picture). */
   readonly rawOptionParagraph?: string;
 }
@@ -65,10 +70,27 @@ export interface FixtureSection {
 const escape = (text: string): string =>
   text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/**
+ * Text runs, with `[[float:caption]]` expanded into a floating picture anchored at that
+ * point - the way a diagram sits among the options in a real paper.
+ */
+const textRuns = (part: string): string =>
+  part
+    .split(/(\[\[(?:float|image):[^\]]*\]\])/)
+    .filter((piece) => piece !== '')
+    .map((piece) => {
+      const float = /^\[\[float:([^\]]*)\]\]$/.exec(piece);
+      if (float) return floatingPictureRun(float[1]!);
+      const inline = /^\[\[image:([^\]]*)\]\]$/.exec(piece);
+      if (inline) return inlinePictureRun(inline[1]!);
+      return `<w:r><w:t xml:space="preserve">${escape(piece)}</w:t></w:r>`;
+    })
+    .join('');
+
 const runs = (text: string): string =>
   text
     .split('\t')
-    .map((part, index) => `${index > 0 ? '<w:r><w:tab/></w:r>' : ''}<w:r><w:t xml:space="preserve">${escape(part)}</w:t></w:r>`)
+    .map((part, index) => `${index > 0 ? '<w:r><w:tab/></w:r>' : ''}${textRuns(part)}`)
     .join('');
 
 const paragraph = (text: string, numId?: string): string =>
@@ -121,6 +143,35 @@ export const symbolContentOptionParagraph = (values: readonly string[]): string 
   );
 };
 
+/**
+ * A run holding a floating (anchored) picture whose text box carries `caption`.
+ *
+ * This is the shape that breaks naive label reading: the caption sits in the paragraph's
+ * text but is drawn somewhere else entirely on the page, so counting it hides whatever
+ * label follows it.
+ */
+export const floatingPictureRun = (caption: string): string =>
+  '<w:r><w:drawing><wp:anchor distT="0" distB="0"><wp:extent cx="100" cy="100"/>' +
+  `<w:txbxContent><w:p><w:r><w:t xml:space="preserve">${escape(caption)}</w:t></w:r></w:p></w:txbxContent>` +
+  '</wp:anchor></w:drawing></w:r>';
+
+/**
+ * A run holding an *inline* picture - one set to "In line with text".
+ *
+ * Unlike an anchored picture this sits in the text flow and moves with the run that holds
+ * it, so an option whose whole answer is such a picture shuffles like any other option.
+ * `id` distinguishes one picture from another in assertions.
+ */
+export const inlinePictureRun = (id: string): string =>
+  '<w:r><w:drawing><wp:inline distT="0" distB="0"><wp:extent cx="100" cy="100"/>' +
+  `<wp:docPr id="1" name="Picture ${escape(id)}"/>` +
+  `<a:blip xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" r:embed="${escape(id)}"/>` +
+  '</wp:inline></w:drawing></w:r>';
+
+/** A paragraph holding nothing but a floating picture - a diagram between the options. */
+export const floatingPictureParagraph = (caption: string): string =>
+  `<w:p><w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>${floatingPictureRun(caption)}</w:p>`;
+
 /** An option paragraph that anchors a floating picture (must never be moved). */
 export const floatingPictureOptionParagraph = (label: string): string =>
   `<w:p><w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>` +
@@ -135,6 +186,7 @@ export type AnswerKeyAnswerFormat =
   | 'letter-bracketed'
   | 'digit'
   | 'digit-dot'
+  | 'digit-bracketed'
   | 'roman'
   | 'roman-bracketed';
 
@@ -152,6 +204,8 @@ function formatAnswer(answer: 'A' | 'B' | 'C' | 'D', format?: AnswerKeyAnswerFor
       return `${index + 1}`;
     case 'digit-dot':
       return `${index + 1}.`;
+    case 'digit-bracketed':
+      return `(${index + 1})`;
     case 'roman':
       return `${ROMAN_NUMERALS[index]})`;
     case 'roman-bracketed':
@@ -236,11 +290,16 @@ export function buildDocumentXml(
             ? LIST.plainStatements
             : undefined;
       question.optionParagraphs.forEach((optionParagraph, position) => {
-        const lettered = question.letteredFirstOption
-          ? position === 0
-            ? LIST.bracketedOptions
-            : undefined
-          : optionListId;
+        const lettered =
+          question.letteredOptionIndex !== undefined
+            ? position === question.letteredOptionIndex
+              ? LIST.bracketedOptions
+              : undefined
+            : question.letteredFirstOption
+              ? position === 0
+                ? LIST.bracketedOptions
+                : undefined
+              : optionListId;
         body.push(paragraph(optionParagraph, lettered));
       });
       if (question.rawOptionParagraph) body.push(question.rawOptionParagraph);

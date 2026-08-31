@@ -70,10 +70,12 @@ describe('GenerationService', () => {
     const result = await service.generate(request({ setCount: 3 }));
 
     expect(path.basename(result.outputFolder)).toBe('question-sets-01');
+    // The run's date and time sit in the name, so match the shape rather than a literal.
+    // `setFileName.test.ts` pins the exact format.
     expect(result.sets.map((set) => set.fileName)).toEqual([
-      'Sample Paper - Set 01.docx',
-      'Sample Paper - Set 02.docx',
-      'Sample Paper - Set 03.docx',
+      expect.stringMatching(/^Sample Paper - \d{2}-\d{2}-\d{4}-\d{2}-\d{2}-Set-01\.docx$/),
+      expect.stringMatching(/^Sample Paper - \d{2}-\d{2}-\d{4}-\d{2}-\d{2}-Set-02\.docx$/),
+      expect.stringMatching(/^Sample Paper - \d{2}-\d{2}-\d{4}-\d{2}-\d{2}-Set-03\.docx$/),
     ]);
     for (const set of result.sets) {
       expect(set.verification.ok, JSON.stringify(set.verification.checks)).toBe(true);
@@ -204,6 +206,98 @@ describe('GenerationService', () => {
     const result = await service.generate(request({ setCount: 1, seed: 'march-batch' }));
     const report = await fs.readFile(result.reportFile, 'utf8');
     expect(report).toContain('- Seed: `march-batch`');
+  });
+
+  describe('the report names options the way the paper names them', () => {
+    /** The mapping rows of the report, which is where answers are quoted. */
+    const mappingRows = (report: string): string[] =>
+      report.split('\n').filter((line) => /^\| \d+ \| \d+ \|/.test(line));
+
+    it('quotes letters for a paper whose key is written A, B, C, D', async () => {
+      const result = await service.generate(request({ setCount: 1 }));
+      const rows = mappingRows(await fs.readFile(result.reportFile, 'utf8'));
+
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.join('\n')).toMatch(/\| [ABCD] \| [ABCD] \|/);
+      expect(rows.join('\n')).not.toMatch(/\([1-4]\)/);
+    });
+
+    it('quotes digits for a paper whose key is written (1), (2), (3), (4)', async () => {
+      // The shape of FST-1-Rep-2024: the paper never writes A-D anywhere, so neither
+      // should the report that describes it.
+      await fs.writeFile(
+        sourceFile,
+        await buildPaper(defaultSections(), { answerKeyAnswerFormat: 'digit-bracketed' }),
+      );
+      const result = await service.generate(request({ setCount: 1 }));
+      const report = await fs.readFile(result.reportFile, 'utf8');
+      const rows = mappingRows(report);
+
+      expect(rows.length).toBeGreaterThan(0);
+      // Original answer and New answer columns.
+      expect(rows.join('\n')).toMatch(/\| \([1-4]\) \| \([1-4]\) \|/);
+      // The option mapping column, e.g. "(1)→(3), (2)→(1), ...".
+      expect(rows.some((row) => /\([1-4]\)→\([1-4]\)/.test(row))).toBe(true);
+      // No stray A-D anywhere in a mapping row.
+      expect(rows.join('\n')).not.toMatch(/\| [ABCD] \||[ABCD]→/);
+    });
+
+    it('quotes roman numerals for a paper whose key is written (i)...(iv)', async () => {
+      await fs.writeFile(
+        sourceFile,
+        await buildPaper(defaultSections(), { answerKeyAnswerFormat: 'roman-bracketed' }),
+      );
+      const result = await service.generate(request({ setCount: 1 }));
+      const rows = mappingRows(await fs.readFile(result.reportFile, 'utf8'));
+
+      expect(rows.length).toBeGreaterThan(0);
+      expect(rows.join('\n')).toMatch(/\| \((?:i|ii|iii|iv)\) \| \((?:i|ii|iii|iv)\) \|/);
+      expect(rows.join('\n')).not.toMatch(/\| [ABCD] \||[ABCD]→/);
+    });
+  });
+
+  describe('set file names carry the run date and time', () => {
+    const NAME_RE = /^Sample Paper - (\d{2}-\d{2}-\d{4}-\d{2}-\d{2})-Set-(\d{2})\.docx$/;
+
+    it('names every file "<paper> - DD-MM-YYYY-HH-MM-Set-NN.docx"', async () => {
+      const result = await service.generate(request({ setCount: 3 }));
+
+      for (const set of result.sets) {
+        expect(set.fileName).toMatch(NAME_RE);
+        expect(NAME_RE.exec(set.fileName)![2]).toBe(String(set.setNumber).padStart(2, '0'));
+      }
+    });
+
+    it('gives every set of one run the same timestamp', async () => {
+      // Stamped once when the run starts, so a run crossing a minute boundary still
+      // produces one consistently named batch.
+      const result = await service.generate(request({ setCount: 3 }));
+
+      const stamps = new Set(result.sets.map((set) => NAME_RE.exec(set.fileName)![1]));
+      expect(stamps.size).toBe(1);
+    });
+
+    it('uses that same instant for the report and for GenerationResult', async () => {
+      const result = await service.generate(request({ setCount: 1 }));
+      const report = await fs.readFile(result.reportFile, 'utf8');
+
+      expect(report).toContain(`- Generated: ${result.generatedAt}`);
+      const expected = new Date(result.generatedAt);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      expect(NAME_RE.exec(result.sets[0]!.fileName)![1]).toBe(
+        `${pad(expected.getDate())}-${pad(expected.getMonth() + 1)}-${expected.getFullYear()}` +
+          `-${pad(expected.getHours())}-${pad(expected.getMinutes())}`,
+      );
+    });
+
+    it('writes the file it reports, under the name it reports', async () => {
+      const result = await service.generate(request({ setCount: 2 }));
+
+      for (const set of result.sets) {
+        expect(path.basename(set.filePath)).toBe(set.fileName);
+        await expect(fs.stat(set.filePath)).resolves.toBeTruthy();
+      }
+    });
   });
 
   it('stamps the set number onto the answer key page', async () => {

@@ -83,6 +83,51 @@ describe('a label after punctuation instead of a tab', () => {
   });
 });
 
+describe('two options on one line pushed apart with spaces instead of a tab', () => {
+  // "…High power loss in transmission              (B) Low power loss in transmission".
+  // The labels are all present and in order; only the separator in front of them is wrong.
+  it('is refused, naming the labels to put a tab in front of', async () => {
+    const { parsed } = await readFirstQuestion({
+      stem: 'If the power factor is low, it means:',
+      optionParagraphs: [
+        '(A)\tHigh power loss              (B)\tLow power loss',
+        '(C)\tMay be high or low              (D)\tNone of these',
+      ],
+      answer: 'A',
+    });
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.reason).toBe('label-after-spaces-not-tab');
+    expect(parsed.detail).toContain('(B), (D)');
+    expect(parsed.detail).toContain('press Tab');
+  });
+
+  it('is not blamed when the space run does not account for every option', async () => {
+    // (C) is glued to the digits of a floating equation, which is the real fault; the space
+    // run before (D) must not be reported as though fixing it would make the question read.
+    const { parsed } = await readFirstQuestion({
+      stem: 'Which one is a wrong statement?',
+      optionParagraphs: ['(A)\tfirst', '(B)\tsecond', '1s22s2(C)\tthird              (D)\tfourth'],
+      answer: 'A',
+    });
+
+    expect(parsed.ok).toBe(false);
+    if (parsed.ok) return;
+    expect(parsed.reason).toBe('unexpected-label-sequence');
+  });
+
+  it('leaves a single space in prose alone, so option cross-references still read', async () => {
+    const { parsed } = await readFirstQuestion({
+      stem: 'Which reactant is limiting?',
+      optionParagraphs: ['(A)\tCaCO3\t(B)\tHCl', '(C)\tBoth (A) and (B)\t(D)\tNone of these'],
+      answer: 'C',
+    });
+
+    expect(contents(parsed)).toEqual(['caco3', 'hcl', 'both (a) and (b)', 'none of these']);
+  });
+});
+
 describe('upper case labels are preferred over lower case', () => {
   // A match-the-columns question lists items as "(a)...(d)" and answers as "(A)...(D)".
   it('reads the answer options, not the item list', async () => {

@@ -8,7 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DocxPackage } from '../src/core/docx/DocxPackage';
-import { NS, childElements, firstChild, visibleText } from '../src/core/docx/xml';
+import { NS, childElements, descendants, firstChild, visibleText } from '../src/core/docx/xml';
 import { GenerationService } from '../src/core/generate/GenerationService';
 import { OptionSetParser } from '../src/core/options/OptionSetParser';
 import { NumberingIndex } from '../src/core/parse/NumberingIndex';
@@ -162,13 +162,58 @@ describe('auto-lettered options', () => {
     expect(parsed.reason).toBe('unexpected-option-count');
   });
 
-  it('are refused when an option anchors a floating picture', async () => {
+  /** Turns raw option-paragraph XML into an auto-lettered list item. */
+  const asListItem = (xml: string): string =>
+    xml.replace(
+      '<w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>',
+      '<w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="90"/></w:numPr></w:pPr>',
+    );
+
+  it('are shuffled when an option merely anchors a floating picture beside its answer', async () => {
+    // The shape of "Extra MTP-1" Q3: the question's diagram is anchored in one of the
+    // option paragraphs. The answer moves, the picture stays where the page puts it.
     const { paper, parser } = await open(
       autoLetteredPaper({
         optionParagraphs: AUTO_OPTIONS.slice(0, 3),
-        rawOptionParagraph: floatingPictureOptionParagraph('').replace(
-          '<w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>',
-          '<w:pPr><w:pStyle w:val="ListParagraph"/><w:numPr><w:ilvl w:val="0"/><w:numId w:val="90"/></w:numPr></w:pPr>',
+        rawOptionParagraph: asListItem(floatingPictureOptionParagraph('')),
+      }),
+    );
+    const parsed = parser.parse(paper.sections[0]!.blocks[0]!);
+
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.notes.map((note) => note.issue)).toContain('floating-picture-in-option-area');
+  });
+
+  it('leaves the anchored picture in its own paragraph while the answers move', async () => {
+    const { paper, parser } = await open(
+      autoLetteredPaper({
+        optionParagraphs: AUTO_OPTIONS.slice(0, 3),
+        rawOptionParagraph: asListItem(floatingPictureOptionParagraph('')),
+      }),
+    );
+    const block = paper.sections[0]!.blocks[0]!;
+    const parsed = parser.parse(block);
+    if (!parsed.ok) throw new Error('expected the options to parse');
+    const anchorParagraph = (): number =>
+      block.nodes.findIndex((node) => descendants(node, NS.wp, 'anchor').length > 0);
+    const before = anchorParagraph();
+
+    parsed.options.apply([3, 2, 1, 0]);
+
+    expect(anchorParagraph()).toBe(before);
+    // The picture's own paragraph now shows the answer that used to be first.
+    expect(visibleText(block.nodes[before]!)).toContain(AUTO_OPTIONS[0]!);
+  });
+
+  it('are refused when an option has nothing but a floating picture', async () => {
+    // Nothing is left to move once the picture stays behind, and which picture belongs to
+    // which option cannot be read from the file.
+    const { paper, parser } = await open(
+      autoLetteredPaper({
+        optionParagraphs: AUTO_OPTIONS.slice(0, 3),
+        rawOptionParagraph: asListItem(
+          floatingPictureOptionParagraph('').replace('<w:r><w:t>diagram</w:t></w:r>', ''),
         ),
       }),
     );
@@ -177,6 +222,67 @@ describe('auto-lettered options', () => {
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
     expect(parsed.reason).toBe('option-contains-floating-graphic');
+    expect(parsed.detail).toMatch(/In line with text/);
+  });
+
+  /**
+   * "Extra MTP-1" Q28: (A), (B) and (D) are typed, and the third option is a lettered list
+   * paragraph, so Word prints its "(C)" and no "(C)" appears in the text. The reader used
+   * to report `Expected labels A,B,C,D but found "ABD"`.
+   */
+  describe('one option lettered by Word among typed labels', () => {
+    const mixedPaper = (letteredAt: number) => {
+      const typed = ['(A)\t1.4 N', '(B)\t3.4 N', '(C)\t5.4 N', '(D)\t7.4 N'];
+      const answers = ['1.4 N', '3.4 N', '5.4 N', '7.4 N'];
+      // The lettered paragraph carries the answer without its label; the rest stay typed.
+      const optionParagraphs = typed.map((text, index) => (index === letteredAt ? answers[index]! : text));
+      return autoLetteredPaper({
+        stem: 'What is the force?',
+        optionParagraphs,
+        autoLettered: false,
+        // Only the one paragraph is a list item.
+        letteredOptionIndex: letteredAt,
+        answer: 'A',
+      } as Partial<FixtureQuestion>);
+    };
+
+    it.each([0, 1, 2, 3])('is read when it sits at position %i', async (letteredAt) => {
+      const { paper, parser } = await open(mixedPaper(letteredAt));
+      const parsed = parser.parse(paper.sections[0]!.blocks[0]!);
+
+      expect(parsed.ok).toBe(true);
+      if (!parsed.ok) return;
+      expect(parsed.options.signatures.map((s) => s.split('|')[0])).toEqual([
+        '1.4 n',
+        '3.4 n',
+        '5.4 n',
+        '7.4 n',
+      ]);
+    });
+
+    it('is reported, because the four labels are not written the same way', async () => {
+      const { paper, parser } = await open(mixedPaper(2));
+      const parsed = parser.parse(paper.sections[0]!.blocks[0]!);
+      if (!parsed.ok) throw new Error('expected the options to parse');
+
+      const note = parsed.notes.find((entry) => entry.issue === 'mixed-auto-and-typed-labels');
+      expect(note).toBeDefined();
+      expect(note!.detail).toMatch(/third option is lettered by Word/);
+    });
+
+    it('moves the answers while every label stays where it is', async () => {
+      const { paper, parser } = await open(mixedPaper(2));
+      const block = paper.sections[0]!.blocks[0]!;
+      const parsed = parser.parse(block);
+      if (!parsed.ok) throw new Error('expected the options to parse');
+
+      parsed.options.apply([3, 2, 1, 0]);
+
+      const texts = block.nodes
+        .filter((node) => node !== block.questionParagraph && node.localName === 'p')
+        .map((node) => visibleText(node).replace(/\s+/g, ' ').trim());
+      expect(texts).toEqual(['(A) 7.4 N', '(B) 5.4 N', '3.4 N', '(D) 1.4 N']);
+    });
   });
 
   it('do not swallow a typed-label question', async () => {

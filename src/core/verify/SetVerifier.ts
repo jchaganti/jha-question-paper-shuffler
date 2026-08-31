@@ -1,4 +1,5 @@
 import { OPTION_LETTERS, type OptionLetter, type VerificationResult } from '../../shared/types';
+import { renderAnswer } from '../../shared/answerStyle';
 import { DocxPackage } from '../docx/DocxPackage';
 import { questionSignature } from '../generate/Signatures';
 import type { IOptionSetParser } from '../options/OptionSet';
@@ -60,8 +61,10 @@ export class SetVerifier {
     const part = pkg.documentPart();
     const numbering = new NumberingIndex(pkg.numberingPart());
     const paper = this.parser.parsePart(part, numbering);
-    // Built from the *generated* file's own numbering, so nothing is assumed about it.
-    const optionParser = new OptionSetParser(numbering);
+    // Built from the *generated* file's own numbering and its own answer key, so nothing
+    // is assumed about it - and so the options are read back the same way they were read
+    // when the set was built.
+    const optionParser = new OptionSetParser(numbering, paper.answerKey.style.scheme);
 
     checks.push({
       name: 'Question count unchanged',
@@ -105,7 +108,14 @@ export class SetVerifier {
         const expectedSignature = originalSlots[OPTION_LETTERS.indexOf(originalAnswer)];
         const actualSignature = newSlots[OPTION_LETTERS.indexOf(newAnswer)];
         if (expectedSignature !== undefined && expectedSignature === actualSignature) keyOk++;
-        else keyBroken.push(`Q${block.printedNumber} key says ${newAnswer} (was Q${originalNumber} answer ${originalAnswer})`);
+        else {
+          // Named the way the paper names its options, so the reader can look the box up.
+          const style = paper.answerKey.style;
+          keyBroken.push(
+            `Q${block.printedNumber} key says ${renderAnswer(newAnswer, style)} ` +
+              `(was Q${originalNumber} answer ${renderAnswer(originalAnswer, style)})`,
+          );
+        }
       }
     }
 

@@ -163,30 +163,44 @@ function renderSummary(paper: PaperSummary): void {
 // --- dry run --------------------------------------------------------------------------
 
 /**
- * Questions that *are* shuffled, but whose option labels had to be worked out from an
- * inconsistent layout. Nothing to do before generating - this is for whoever types the
- * next paper, so it is grouped by problem with the fix stated once.
+ * One of the dry run's three numbered findings.
+ *
+ * All three are rendered the same way and shown every run, even when the count is zero, so
+ * the report answers the same three questions in the same order every time: what could not
+ * be read, what was read but is worth tidying, and what was read fine but may not mean the
+ * same once its options move.
+ */
+function renderFinding(number: number, heading: string, explanation: string): HTMLDetailsElement {
+  const details = document.createElement('details');
+  details.className = 'finding';
+  details.append(
+    element('summary', '', `${number}. ${heading}`),
+    element('p', 'hint', explanation),
+  );
+  dryRunPanel.append(details);
+  return details;
+}
+
+/**
+ * Finding 2: questions that *are* shuffled, but whose option labels had to be worked out
+ * from an inconsistent layout. Nothing to do before generating - this is for whoever types
+ * the next paper, so it is grouped by problem with the fix stated once.
  *
  * The grouping arrives ready-made from the main process (`PaperSummary.layoutNoteGroups`),
  * so the UI and the CLI cannot drift apart.
  */
 function renderLayoutNotes(paper: PaperSummary): void {
   const groups = paper.layoutNoteGroups;
-  if (groups.length === 0) return;
-
   // A question can carry more than one note, so count questions, not notes.
   const affected = new Set(paper.layoutNotes.map((note) => note.questionNumber)).size;
-  const details = document.createElement('details');
-  details.append(
-    element('summary', '', `${affected} question(s) shuffled, but worth correcting in the Word document`),
-    element(
-      'p',
-      'hint',
-      'These are shuffled normally and their answer letters are correct. The tool worked the ' +
-        'option labels out from a layout that was not consistent — it can, but it should not ' +
-        'have to. Tidying them up in Word removes any doubt for the next paper.',
-    ),
+  const details = renderFinding(
+    2,
+    `${affected} question(s) shuffled, but worth correcting in the Word document`,
+    'These are shuffled correctly and their answers are right. The tool had to work their ' +
+      'option labels out from a layout that was not consistent — it can, but it should not ' +
+      'have to. Tidying them up in Word removes any doubt for the next paper.',
   );
+  if (groups.length === 0) return;
 
   const list = document.createElement('ul');
   list.className = 'notes-list';
@@ -200,7 +214,6 @@ function renderLayoutNotes(paper: PaperSummary): void {
     list.append(item);
   }
   details.append(list);
-  dryRunPanel.append(details);
 }
 
 function renderDryRun(report: DryRunReport): void {
@@ -237,88 +250,69 @@ function renderDryRun(report: DryRunReport): void {
     dryRunPanel.append(notice);
   }
 
-  if (report.optionsKeptByTool.length > 0) {
-    const details = document.createElement('details');
-    details.append(
-      element(
-        'summary',
-        '',
-        `${report.optionsKeptByTool.length} question(s) whose options cannot be shuffled with certainty`,
-      ),
-      element(
-        'p',
-        'hint',
-        'These keep their original option order in every set, and their answer letter never changes. ' +
-          'No action needed - they are listed so you know which ones were left alone. To avoid this in ' +
-          'the next paper, see "How to write the Word document" at the top of this window.',
-      ),
+  // 1. Could not be read.
+  {
+    const details = renderFinding(
+      1,
+      `${report.optionsKeptByTool.length} question(s) whose options cannot be shuffled with certainty`,
+      'These questions could not be parsed, so they keep their original option order in every ' +
+        'set and their answer never changes. Each one below says what stopped it and what to ' +
+        'change in Word; see also "How to write the Word document" at the top of this window.',
     );
     const list = document.createElement('ul');
     for (const item of report.optionsKeptByTool) {
       list.append(element('li', '', `Q${item.questionNumber} (${item.subject}) — ${item.detail}`));
     }
-    details.append(list);
-    dryRunPanel.append(details);
+    if (report.optionsKeptByTool.length > 0) details.append(list);
   }
 
+  // 2. Read, but worth tidying.
   renderLayoutNotes(report.paper);
 
-  if (report.optionsKeptByUser.length > 0) {
-    dryRunPanel.append(
-      element(
-        'p',
-        'hint number-list',
-        `Options kept because you asked: ${report.optionsKeptByUser.join(', ')}`,
-      ),
-    );
-  }
-
-  if (report.suggestedForExclusion.length > 0) {
-    const notice = element('div', 'notice');
-    notice.append(
-      element(
-        'strong',
-        '',
-        `${report.suggestedForExclusion.length} question(s) worth keeping in their original option order`,
-      ),
-      element(
-        'span',
-        '',
-        'Their option text depends on its position, so shuffling can change the meaning ' +
-          '("None of these", "Both (A) and (B)", assertion-reason sets).',
-      ),
+  // 3. Read fine, but position-dependent.
+  {
+    const details = renderFinding(
+      3,
+      `${report.suggestedForExclusion.length} question(s) worth keeping in their original option order`,
+      'Their option text depends on its position, so shuffling can change the meaning ' +
+        '("None of these", "Both (A) and (B)"). Nothing is wrong with ' +
+        'them — this is your call, not the tool’s.',
     );
 
     const list = document.createElement('ul');
     for (const item of report.suggestedForExclusion) {
       list.append(element('li', '', `Q${item.questionNumber} (${item.subject}) — ${item.detail}`));
     }
-    const details = document.createElement('details');
-    details.append(element('summary', '', 'Show the list'), list);
-    notice.append(details);
+    if (report.suggestedForExclusion.length > 0) details.append(list);
 
-    const addButton = document.createElement('button');
-    addButton.type = 'button';
-    addButton.className = 'button button--secondary';
-    addButton.style.marginTop = '10px';
-    addButton.textContent = `Add these ${report.suggestedForExclusion.length} to "keep the option order"`;
-    addButton.addEventListener('click', () => {
-      addToField(
-        optionExclusions,
-        report.suggestedForExclusion.map((item) => item.questionNumber),
+    if (report.optionsKeptByUser.length > 0) {
+      details.append(
+        element(
+          'p',
+          'hint',
+          `Already kept because you asked: ${report.optionsKeptByUser.join(', ')}`,
+        ),
       );
-      shuffleOptions.checked = true;
-      refreshEnabled();
-      addButton.disabled = true;
-      addButton.textContent = 'Added — run Dry run again to confirm';
-      setStatus('Exclusion list updated.');
-    });
-    notice.append(document.createElement('br'), addButton);
-    dryRunPanel.append(notice);
-  } else if (report.shuffleOptions) {
-    dryRunPanel.append(
-      element('p', 'hint', 'No further questions look position-dependent. Nothing else to exclude.'),
-    );
+    }
+
+    if (report.suggestedForExclusion.length > 0) {
+      const addButton = document.createElement('button');
+      addButton.type = 'button';
+      addButton.className = 'button button--secondary';
+      addButton.textContent = `Add these ${report.suggestedForExclusion.length} to "keep the option order"`;
+      addButton.addEventListener('click', () => {
+        addToField(
+          optionExclusions,
+          report.suggestedForExclusion.map((item) => item.questionNumber),
+        );
+        shuffleOptions.checked = true;
+        refreshEnabled();
+        addButton.disabled = true;
+        addButton.textContent = 'Added — run Dry run again to confirm';
+        setStatus('Exclusion list updated.');
+      });
+      details.append(addButton);
+    }
   }
 }
 

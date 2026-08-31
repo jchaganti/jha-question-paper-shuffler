@@ -1,11 +1,12 @@
 import type { OptionLayoutNote, SkipReason } from '../../shared/types';
 import type { Element, Node } from '../docx/dom';
-import { NS, childElements, firstChild, replaceChildren } from '../docx/xml';
+import { NS, firstChild, replaceChildren } from '../docx/xml';
 import type { NumberingIndex } from '../parse/NumberingIndex';
 import { paragraphNumId } from '../parse/PaperParser';
 import type { QuestionBlock } from '../parse/PaperModel';
-import { buildParagraphAtoms, type Atom } from './Atoms';
+import { buildParagraphAtoms, splitLeadCorePad, type Atom } from './Atoms';
 import { slotSignature } from './OptionBlockParser';
+import { mergeAdjacentRuns } from './RunMerger';
 import type { IOptionSetParser, OptionSet, OptionSetResult } from './OptionSet';
 
 /** Word numbering formats that produce option letters. */
@@ -74,23 +75,57 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
     }
 
     const paragraphs = candidates[0]!.paragraphs;
-    const contents = paragraphs.map((paragraph) => buildParagraphAtoms([paragraph])[0]!.atoms);
+    // Split each option paragraph the same way a typed-label option is split: a floating
+    // picture anchored in it, and the tabs around the answer, belong to the *position* and
+    // stay put; only the answer itself moves to another letter.
+    const slots = paragraphs.map((paragraph) => splitLeadCorePad(buildParagraphAtoms([paragraph])[0]!.atoms));
+    let anchoredPictures = 0;
 
-    for (let i = 0; i < contents.length; i++) {
-      const atoms = contents[i]!;
-      if (atoms.every((atom) => atom.blank)) {
-        return { ok: false, reason: 'options-not-found', detail: `Auto-lettered option ${i + 1} is empty.` };
+    for (let i = 0; i < slots.length; i++) {
+      const { lead, core, pad } = slots[i]!;
+      anchoredPictures += [...lead, ...pad].filter((atom) => atom.floatingGraphic).length;
+
+      if (core.length === 0) {
+        const floating = [...lead, ...pad].some((atom) => atom.floatingGraphic);
+        return {
+          ok: false,
+          reason: floating ? 'option-contains-floating-graphic' : 'options-not-found',
+          detail: floating
+            ? `Auto-lettered option ${i + 1} has no text of its own, and this question's options ` +
+              'are floating pictures - so which picture belongs to which option cannot be ' +
+              'established. Select each option picture in Word and set Layout Options to ' +
+              '"In line with text"; the options can then be shuffled.'
+            : `Auto-lettered option ${i + 1} is empty.`,
+        };
       }
-      if (atoms.some((atom) => atom.floatingGraphic)) {
+      // Only a picture wedged between the words of one answer is fatal: the words would
+      // move to another letter and the picture, placed from the page, would stay behind.
+      if (core.some((atom) => atom.floatingGraphic)) {
         return {
           ok: false,
           reason: 'option-contains-floating-graphic',
-          detail: `Auto-lettered option ${i + 1} contains a floating picture, which cannot be moved.`,
+          detail:
+            `Auto-lettered option ${i + 1} has a floating picture in the middle of its answer, ` +
+            'so the words and the picture cannot be moved together.',
         };
       }
     }
 
-    return { ok: true, options: new AutoLetteredOptionSet(paragraphs, contents), notes };
+    const allNotes = [...notes];
+    if (anchoredPictures > 0) {
+      allNotes.push({
+        issue: 'floating-picture-in-option-area',
+        detail:
+          `${anchoredPictures} floating picture(s) are anchored among the options. The options ` +
+          'were shuffled and each picture was left exactly where it is, because a floating ' +
+          'picture is placed from the page and does not travel with the text beside it.',
+        fix:
+          'Check that no picture was meant to belong to one particular option. If one was, ' +
+          'select it and set Layout Options to "In line with text" so it moves with its option.',
+      });
+    }
+
+    return { ok: true, options: new AutoLetteredOptionSet(paragraphs, slots), notes: allNotes };
   }
 
   private letterListsIn(block: QuestionBlock): LetterList[] {
@@ -140,11 +175,16 @@ class AutoLetteredOptionSet implements OptionSet {
 
   constructor(
     private readonly paragraphs: readonly Element[],
-    private readonly contents: readonly Atom[][],
+    private readonly slots: readonly { lead: Atom[]; core: Atom[]; pad: Atom[] }[],
   ) {}
 
+  /**
+   * The fingerprint is the *moving* part only. A floating picture anchored in one of these
+   * paragraphs stays behind, so counting it would make every slot look changed after a
+   * shuffle and the verifier would report a fault that is not there.
+   */
   get signatures(): string[] {
-    return this.contents.map((atoms) => slotSignature(atoms));
+    return this.slots.map((slot) => slotSignature(slot.core));
   }
 
   apply(permutation: readonly number[]): void {
@@ -154,20 +194,19 @@ class AutoLetteredOptionSet implements OptionSet {
       );
     }
 
-    // Snapshot first: a paragraph's content may be needed after its own has been replaced.
-    const snapshots = this.paragraphs.map((paragraph) =>
-      childElements(paragraph)
-        .filter((child) => !(child.namespaceURI === NS.w && child.localName === 'pPr'))
-        .map((child) => child.cloneNode(true)),
-    );
-
     this.paragraphs.forEach((paragraph, index) => {
+      const source = this.slots[permutation[index]!];
+      if (!source) throw new Error(`Permutation refers to option ${permutation[index]}, which does not exist`);
+      const own = this.slots[index]!;
       const pPr = firstChild(paragraph, NS.w, 'pPr');
       const nodes: Node[] = [];
       // The numbering properties stay, so Word keeps lettering this paragraph in place.
       if (pPr) nodes.push(pPr);
-      nodes.push(...(snapshots[permutation[index]!] ?? []));
-      replaceChildren(paragraph, nodes);
+      // This paragraph's own tabs and anchored pictures; the answer comes from the source.
+      for (const atom of own.lead) nodes.push(atom.node);
+      for (const atom of source.core) nodes.push(atom.node);
+      for (const atom of own.pad) nodes.push(atom.node);
+      replaceChildren(paragraph, mergeAdjacentRuns(nodes));
     });
   }
 }

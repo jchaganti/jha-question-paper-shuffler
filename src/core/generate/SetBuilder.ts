@@ -1,4 +1,5 @@
 import { OPTION_LETTERS, type OptionLetter, type QuestionMapping, type SkippedOptionShuffle } from '../../shared/types';
+import { renderAnswer, type AnswerStyle } from '../../shared/answerStyle';
 import { DocxPackage } from '../docx/DocxPackage';
 import type { Element } from '../docx/dom';
 import {
@@ -77,7 +78,7 @@ export class SetBuilder {
     const part = pkg.documentPart();
     const numbering = new NumberingIndex(pkg.numberingPart());
     const paper = this.parser.parsePart(part, numbering);
-    const optionParser = new OptionSetParser(numbering);
+    const optionParser = new OptionSetParser(numbering, paper.answerKey.style.scheme);
     report(STEP.parsed, 'Reading the paper');
 
     const skipped: SkippedOptionShuffle[] = [];
@@ -141,7 +142,7 @@ export class SetBuilder {
           originalNumber,
           originalAnswer,
           newAnswer,
-          optionMapping: wasShuffled ? describePermutation(permutation!) : '',
+          optionMapping: wasShuffled ? describePermutation(permutation!, paper.answerKey.style) : '',
         });
       });
 
@@ -180,10 +181,21 @@ export function mapAnswer(originalAnswer: OptionLetter, permutation: readonly nu
   return OPTION_LETTERS[newSlot]!;
 }
 
-export function describePermutation(permutation: readonly number[]): string {
+/**
+ * "A→C, B→A, ..." in the paper's own option names, so the report reads in the same
+ * vocabulary as the paper it describes: a paper written "(1) (2) (3) (4)" gets
+ * "(1)→(3), ...". Defaults to bare letters when no style is known.
+ */
+export function describePermutation(permutation: readonly number[], style?: AnswerStyle): string {
   return permutation
-    .map((source, target) => `${OPTION_LETTERS[source]}→${OPTION_LETTERS[target]}`)
-    .sort()
+    .map((source, target) => ({ source, target }))
+    // Sorted by slot, not by rendered text: "(10)" would sort before "(2)" as a string,
+    // and lower-case letters sort after upper-case ones.
+    .sort((a, b) => a.source - b.source)
+    .map(
+      ({ source, target }) =>
+        `${renderAnswer(OPTION_LETTERS[source]!, style)}→${renderAnswer(OPTION_LETTERS[target]!, style)}`,
+    )
     .join(', ');
 }
 

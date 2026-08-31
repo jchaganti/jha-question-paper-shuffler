@@ -126,6 +126,47 @@ describe('an item list that must not be mistaken for the options', () => {
     expect(contents(parsed)).toEqual(['(1) and (2)', '(3) and (4)', '(1), (3) and (4)', '(2) and (4)']);
   });
 
+  it("follows the answer key's scheme when two readings are both clean", async () => {
+    // FST-1 Q80: a match-the-columns question whose column entries are lettered (a)-(d)
+    // and whose real options are (1)-(4). Read by pass order alone the letters win, and
+    // the tool would shuffle the column entries. The key writes its answers as digits, so
+    // the paper itself says which run of labels names its options.
+    const question = {
+      stem: 'Match the electronic configurations with their groups',
+      optionParagraphs: [
+        '(i)\t[Ar] 3d5 4s1\t(a)\t1st group',
+        '(ii)\t[Ar] 3d10 4s2 4p2\t(b)\t3rd group',
+        '(iii)\t[Xe] 4f14 5d0 6s2\t(c)\t14th group',
+        '(iv)\t[Kr] 5s1\t(d)\t6th group',
+        '(1)\ti-a, ii-c, iii-b, iv-d',
+        '(2)\ti-a, ii-c, iii-d, iv-b',
+        '(3)\ti-b, ii-c, iii-d, iv-a',
+        '(4)\ti-d, ii-c, iii-b, iv-a',
+      ],
+      answer: 'A' as const,
+    };
+    const filler = Array.from({ length: 6 }, (_unused, index) => ({
+      stem: `Filler question ${index + 1}`,
+      optionParagraphs: ['(1)\tone\t(2)\ttwo\t(3)\tthree\t(4)\tfour'],
+      answer: 'A' as const,
+    }));
+    const sections = [{ subject: 'PHYSICS', startNumber: 1, numId: '1', questions: [question, ...filler] }];
+
+    const pkg = await DocxPackage.fromBuffer(await buildPaper(sections, { answerKeyAnswerFormat: 'digit' }));
+    const numbering = new NumberingIndex(pkg.numberingPart());
+    const paper = new PaperParser().parsePart(pkg.documentPart(), numbering);
+    const parsed = new OptionSetParser(numbering, paper.answerKey.style.scheme).parse(
+      paper.sections[0]!.blocks[0]!,
+    );
+
+    expect(contents(parsed)).toEqual([
+      'i-a, ii-c, iii-b, iv-d',
+      'i-a, ii-c, iii-d, iv-b',
+      'i-b, ii-c, iii-d, iv-a',
+      'i-d, ii-c, iii-b, iv-a',
+    ]);
+  });
+
   it('prefers the digit answers over a roman item list above them', async () => {
     const parsed = await readFirstQuestion({
       stem: 'Match the columns',

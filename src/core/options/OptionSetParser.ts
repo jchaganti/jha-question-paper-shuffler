@@ -1,3 +1,4 @@
+import type { AnswerScheme } from '../../shared/answerStyle';
 import type { QuestionBlock } from '../parse/PaperModel';
 import type { NumberingIndex } from '../parse/NumberingIndex';
 import { AutoLetteredOptionParser } from './AutoLetteredOptionParser';
@@ -19,11 +20,16 @@ export class OptionSetParser implements IOptionSetParser {
 
   constructor(
     numbering: NumberingIndex,
+    /**
+     * How this paper's answer key names an option. Passed on so that labels written the
+     * same way are looked for first - see `OptionBlockParser`.
+     */
+    answerScheme?: AnswerScheme,
     private readonly applier: OptionShuffleApplier = new OptionShuffleApplier(),
   ) {
     // The typed-label reader needs the numbering too: some questions type only (B), (C)
     // and (D) and let Word letter the first option.
-    this.typedLabels = new OptionBlockParser(numbering);
+    this.typedLabels = new OptionBlockParser(numbering, answerScheme);
     this.autoLettered = new AutoLetteredOptionParser(numbering);
   }
 

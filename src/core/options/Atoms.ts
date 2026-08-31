@@ -82,14 +82,19 @@ function atomsOfParagraph(paragraph: Element, paragraphIndex: number): Atom[] {
 }
 
 function makeAtom(node: Element, source: Element, paragraphIndex: number): Atom {
-  const text = atomText(source);
+  const floatingGraphic = hasFloatingGraphic(source);
+  // A floating picture is positioned from the page, not from the text around it, so any
+  // words in its text box are not part of the sentence the reader sees. Counting them
+  // would put "O A B Cl" in front of the next option label and hide it. It contributes no
+  // text to the reading flow; the picture itself is untouched.
+  const text = floatingGraphic ? '' : atomText(source);
   const ink = hasInk(source) || text.trim() !== '';
   return {
     node,
     paragraphIndex,
     text,
     blank: !ink,
-    floatingGraphic: hasFloatingGraphic(source),
+    floatingGraphic,
     symbol: source.namespaceURI === NS.w && source.localName === 'sym',
   };
 }
@@ -211,16 +216,21 @@ export function splitAtomsAtOffsets(atoms: readonly Atom[], offsets: readonly nu
  *
  * Trimming it into the padding keeps every separator exactly where the author put it, and
  * loses nothing: the padding is re-emitted for the slot it came from.
+ *
+ * A floating picture anchored at either end is layout for the same reason: the page, not
+ * the option, decides where it is drawn, so it stays behind while the words move. One left
+ * *inside* the content is a different matter and is refused by the caller.
  */
 export function splitLeadCorePad(content: readonly Atom[]): {
   lead: Atom[];
   core: Atom[];
   pad: Atom[];
 } {
+  const isLayout = (atom: Atom): boolean => atom.blank || atom.floatingGraphic;
   let start = 0;
-  while (start < content.length && content[start]!.blank) start++;
+  while (start < content.length && isLayout(content[start]!)) start++;
   let end = content.length;
-  while (end > start && content[end - 1]!.blank) end--;
+  while (end > start && isLayout(content[end - 1]!)) end--;
 
   const lead = content.slice(0, start);
   const pad = content.slice(end);
@@ -246,6 +256,36 @@ export function splitLeadCorePad(content: readonly Atom[]): {
   }
 
   return { lead, core, pad };
+}
+
+/**
+ * Splits the *last* option's content where the option list ends.
+ *
+ * The last option is the only one with no following label to bound it, so it runs to the
+ * end of the question block and swallows whatever trails behind: the spacer paragraphs
+ * that separate one question from the next, a "SECTION B (Attempt any 10 questions)"
+ * instruction, the artwork of the question below. Read as content, that made the option
+ * "continue on another paragraph" and the question was refused.
+ *
+ * A blank paragraph ends the list. That is the same reading the parser already applies to
+ * a subject - blank paragraphs at its end are page spacing, not part of the last question -
+ * and it keeps a genuine continuation refused, because a continuation follows immediately,
+ * with no blank paragraph in between.
+ */
+export function splitTrailingBlock(
+  content: readonly Atom[],
+  /** Indexes of the option region's paragraphs that hold nothing but whitespace. */
+  blankParagraphs: ReadonlySet<number>,
+): { kept: Atom[]; trailing: Atom[] } {
+  const start = content[0]?.paragraphIndex;
+  if (start === undefined) return { kept: [...content], trailing: [] };
+
+  // The first blank paragraph after the one the option starts on ends the list.
+  const end = [...blankParagraphs].filter((index) => index > start).sort((a, b) => a - b)[0];
+  if (end === undefined) return { kept: [...content], trailing: [] };
+
+  const cut = content.findIndex((atom) => atom.paragraphIndex >= end);
+  return cut < 0 ? { kept: [...content], trailing: [] } : { kept: content.slice(0, cut), trailing: content.slice(cut) };
 }
 
 function isSplittableText(atom: Atom): boolean {

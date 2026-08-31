@@ -23,7 +23,9 @@ export class OptionShuffleApplier {
     const buckets = new Map<number, Atom[]>();
     for (const entry of block.paragraphs) buckets.set(entry.paragraphIndex, []);
     const push = (atom: Atom, paragraphIndex: number): void => {
-      buckets.get(paragraphIndex)?.push(atom);
+      // A floating picture is anchored to a paragraph and drawn from the page, so it always
+      // goes back to the paragraph it came from, whichever slot's layout it now sits in.
+      buckets.get(atom.floatingGraphic ? atom.paragraphIndex : paragraphIndex)?.push(atom);
     };
 
     for (const atom of block.prefixAtoms) push(atom, atom.paragraphIndex);

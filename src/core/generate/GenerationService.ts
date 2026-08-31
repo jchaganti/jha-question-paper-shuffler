@@ -156,6 +156,9 @@ export class GenerationService {
     onProgress({ stage: 'planning', message: 'Planning the sets...', fraction: 0 });
     // Resolved here (not inside the planner) so the exact seed can be reported back.
     const runSeed = resolveSeed(request.seed);
+    // Read once, so every set of this run carries the same date and time in its name even
+    // if the run crosses a minute boundary.
+    const runStartedAt = new Date();
     const plans = this.planner.plan({ sections, shufflableOptionQuestions, request, baseSeed: runSeed });
     const folder = await this.folders.create(request.sourceFile);
 
@@ -188,7 +191,7 @@ export class GenerationService {
           emit(fraction < 0.55 ? 'options' : fraction < 0.95 ? 'ordering' : 'packaging', plan.setNumber, fraction * BUILD_SHARE, message),
       });
 
-      const fileName = setFileName(request.sourceFile, plan.setNumber);
+      const fileName = setFileName(request.sourceFile, plan.setNumber, runStartedAt);
       const filePath = path.join(folder, fileName);
       emit('writing', plan.setNumber, 0.88, `Writing ${fileName}`);
       await fs.writeFile(filePath, built.buffer);
@@ -211,7 +214,13 @@ export class GenerationService {
       });
     }
 
-    const partial = { outputFolder: folder, seed: runSeed, paper: summary, sets };
+    const partial = {
+      outputFolder: folder,
+      seed: runSeed,
+      generatedAt: runStartedAt.toISOString(),
+      paper: summary,
+      sets,
+    };
     const reportFile = await this.reports.write(folder, request, partial);
     onProgress({
       stage: 'done',
@@ -249,10 +258,10 @@ export class GenerationService {
 
   private parsePackage(pkg: DocxPackage): { paper: ParsedPaper; optionParser: IOptionSetParser } {
     const numbering = new NumberingIndex(pkg.numberingPart());
-    return {
-      paper: this.parser.parsePart(pkg.documentPart(), numbering),
-      optionParser: new OptionSetParser(numbering),
-    };
+    const paper = this.parser.parsePart(pkg.documentPart(), numbering);
+    // The key states how this paper names an option, so labels written the same way are
+    // looked for before any other scheme.
+    return { paper, optionParser: new OptionSetParser(numbering, paper.answerKey.style.scheme) };
   }
 
   private summarise(sourceFile: string, paper: ParsedPaper, optionParser: IOptionSetParser): PaperSummary {
@@ -290,8 +299,10 @@ export class GenerationService {
       sourceFile,
       questionCount: paper.questionCount,
       subjects,
+      answerStyle: paper.answerKey.style,
       unshufflableOptions,
-      advisories: this.advisor.advise(paper),
+      // The advisor reads the options themselves, so it needs the same parser.
+      advisories: this.advisor.advise(paper, optionParser),
       layoutNotes,
       layoutNoteGroups: groupLayoutNotes(layoutNotes),
     };

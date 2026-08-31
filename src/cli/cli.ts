@@ -94,29 +94,43 @@ async function main(): Promise<void> {
       `\nTotals: ${report.questionsEligibleToMove} question(s) free to move, ` +
         `options shuffled for ${report.optionsToShuffle} question(s).`,
     );
-    console.log(`\nOptions kept because the tool cannot parse them (${report.optionsKeptByTool.length}):`);
+    // Three sections, in this order and always shown, so the same three questions are
+    // answered every run: what could not be read, what was read but is worth tidying, and
+    // what was read fine but may not mean the same once its options move.
+    console.log(
+      `\n1. ${report.optionsKeptByTool.length} question(s) whose options cannot be shuffled with certainty.`,
+    );
+    console.log('   These questions could not be parsed, so they keep their original option order');
+    console.log('   and their answer is unchanged.');
     for (const item of report.optionsKeptByTool) {
-      console.log(`  Q${item.questionNumber} [${item.subject}] ${item.reason}: ${item.detail}`);
-    }
-    console.log(`\nOptions kept because you asked (${report.optionsKeptByUser.length}): ${report.optionsKeptByUser.join(', ') || '-'}`);
-    const groups = report.paper.layoutNoteGroups;
-    if (groups.length > 0) {
-      const affected = questionsWithLayoutNotes(report.paper.layoutNotes);
-      console.log(`\nShuffled, but worth correcting in the Word document (${affected.length} question(s)):`);
-      for (const group of groups) {
-        console.log(`  ${group.label}`);
-        console.log(`    questions: ${group.questionNumbers.join(', ')}`);
-        console.log(`    fix: ${group.fix}`);
-      }
+      console.log(`     Q${item.questionNumber} [${item.subject}] ${item.reason}: ${item.detail}`);
     }
 
-    console.log(`\nSuggested for --keep-option-order (${report.suggestedForExclusion.length}):`);
+    const groups = report.paper.layoutNoteGroups;
+    const affected = questionsWithLayoutNotes(report.paper.layoutNotes);
+    console.log(`\n2. ${affected.length} question(s) shuffled, but worth correcting in the Word document.`);
+    console.log('   These were shuffled correctly; their layout had to be worked out, so correcting');
+    console.log('   the source removes the guesswork next time.');
+    for (const group of groups) {
+      console.log(`     ${group.label}`);
+      console.log(`       questions: ${group.questionNumbers.join(', ')}`);
+      console.log(`       fix: ${group.fix}`);
+    }
+
+    console.log(
+      `\n3. ${report.suggestedForExclusion.length} question(s) worth keeping in their original option order.`,
+    );
+    console.log('   Their option text looks position-dependent, so shuffling may change what it means.');
     for (const item of report.suggestedForExclusion) {
-      console.log(`  Q${item.questionNumber} [${item.subject}] ${item.kind}: ${item.detail}`);
+      console.log(`     Q${item.questionNumber} [${item.subject}] ${item.kind}: ${item.detail}`);
     }
     if (report.suggestedForExclusion.length > 0) {
-      console.log(`\n  --keep-option-order ${report.suggestedForExclusion.map((i) => i.questionNumber).join(',')}`);
+      console.log(`\n     --keep-option-order ${report.suggestedForExclusion.map((i) => i.questionNumber).join(',')}`);
     }
+    console.log(
+      `\nOptions already kept because you asked (${report.optionsKeptByUser.length}): ` +
+        `${report.optionsKeptByUser.join(', ') || '-'}`,
+    );
     for (const warning of report.warnings) console.log(`\nWARNING: ${warning}`);
     return;
   }

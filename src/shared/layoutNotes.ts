@@ -15,6 +15,7 @@ export const LAYOUT_ISSUE_LABEL: Record<OptionLayoutIssue, string> = {
   'label-not-after-tab': 'An option label has no tab in front of it',
   'mixed-label-case': 'The four option labels mix capital and small letters',
   'several-lettered-lists': 'More than one lettered list could have been the options',
+  'floating-picture-in-option-area': 'A floating picture sits among the options',
 };
 
 export function groupLayoutNotes(notes: readonly QuestionLayoutNote[]): LayoutNoteGroup[] {

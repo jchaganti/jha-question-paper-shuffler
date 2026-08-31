@@ -4,7 +4,15 @@
  * imported from any of the three environments.
  */
 
-/** The four answer slots of a multiple-choice question. */
+import type { AnswerStyle } from './answerStyle';
+
+/**
+ * The four answer slots of a multiple-choice question.
+ *
+ * This is the tool's *internal* vocabulary: a slot is always A-D whatever the paper prints
+ * on the page. Anything shown to the user is rendered back into the paper's own style with
+ * `renderAnswer` - see `./answerStyle`.
+ */
 export const OPTION_LETTERS = ['A', 'B', 'C', 'D'] as const;
 export type OptionLetter = (typeof OPTION_LETTERS)[number];
 
@@ -54,6 +62,8 @@ export type SkipReason =
   | 'options-inside-table'
   /** A label's opening bracket is a symbol-font character, not ordinary text. */
   | 'label-bracket-is-a-symbol'
+  /** Options on one line are separated by a run of spaces instead of a tab. */
+  | 'label-after-spaces-not-tab'
   /** An auto-lettered list was found, but not with exactly four items. */
   | 'unexpected-option-count'
   /** Several lettered lists could be the options; the tool will not guess. */
@@ -82,7 +92,9 @@ export type OptionLayoutIssue =
   /** The four labels do not all use the same case, e.g. "(A) (b) (C) (d)". */
   | 'mixed-label-case'
   /** Several lettered lists could have been the options; the likeliest one was used. */
-  | 'several-lettered-lists';
+  | 'several-lettered-lists'
+  /** A floating picture is anchored among the options; it was left exactly where it is. */
+  | 'floating-picture-in-option-area';
 
 export interface OptionLayoutNote {
   readonly issue: OptionLayoutIssue;
@@ -133,6 +145,11 @@ export interface PaperSummary {
   readonly sourceFile: string;
   readonly questionCount: number;
   readonly subjects: readonly SubjectSummary[];
+  /**
+   * How this paper names an option - letters `(A)`, digits `(1)`, roman numerals `(i)` -
+   * read from its own answer key. Answers shown back to the user are rendered through it.
+   */
+  readonly answerStyle: AnswerStyle;
   /** Questions whose options cannot be shuffled safely, whatever the user asks. */
   readonly unshufflableOptions: readonly SkippedOptionShuffle[];
   /** Questions worth adding to the "options not shuffled" exclusion list. */
@@ -220,6 +237,11 @@ export interface GenerationResult {
    * them. Passing it back as `GenerationRequest.seed` reproduces these exact sets.
    */
   readonly seed: string;
+  /**
+   * When this run started, ISO 8601. The same instant is stamped into every set's file
+   * name, so a file can always be traced back to the run that produced it.
+   */
+  readonly generatedAt: string;
   readonly paper: PaperSummary;
   readonly sets: readonly GeneratedSet[];
 }

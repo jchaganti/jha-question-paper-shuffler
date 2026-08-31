@@ -56,7 +56,10 @@ describe('OptionBlockParser', () => {
     expect(parsed.reason).toBe('options-not-found');
   });
 
-  it('refuses an option that anchors a floating picture', async () => {
+  it('refuses an option whose whole answer is a floating picture, and says how to fix it', async () => {
+    // An option may perfectly well *be* a picture - but only an inline one can be moved.
+    // `floatingPictures.test.ts` covers the cases that *are* now shuffled, and
+    // `imageOptions.test.ts` covers inline images, which shuffle like any other content.
     const sections = defaultSections();
     const physics = sections[0]!;
     const withPicture = {
@@ -64,8 +67,8 @@ describe('OptionBlockParser', () => {
       questions: [
         {
           stem: 'Identify the diagram',
-          optionParagraphs: ['(A)\tfirst', '(B)\tsecond', '(D)\tfourth'],
-          rawOptionParagraph: floatingPictureOptionParagraph('(C)'),
+          optionParagraphs: ['(A)\tfirst', '(B)\tsecond', '(C)\tthird'],
+          rawOptionParagraph: floatingPictureOptionParagraph('(D)').replace('<w:r><w:t>diagram</w:t></w:r>', ''),
           answer: 'A' as const,
         },
         ...physics.questions.slice(1),
@@ -75,8 +78,10 @@ describe('OptionBlockParser', () => {
 
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
-    // The label order in that fixture is A, B, D, C - which is itself a refusal reason.
-    expect(['option-contains-floating-graphic', 'unexpected-label-sequence']).toContain(parsed.reason);
+    expect(parsed.reason).toBe('option-contains-floating-graphic');
+    expect(parsed.detail).toMatch(/Option \(D\) has no text of its own/);
+    expect(parsed.detail).toMatch(/options are floating pictures/);
+    expect(parsed.detail).toMatch(/In line with text/);
   });
 
   it('does not treat "(A)" inside option text as a label', async () => {

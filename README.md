@@ -4,7 +4,8 @@ Desktop app (Electron + TypeScript) that turns one NEET-style Word question pape
 *N* shuffled sets, each with its own correct answer key.
 
 - Questions are re-ordered **within a subject only**.
-- Option labels `(A)`–`(D)` stay where they are; only the answer text moves between them.
+- Option labels stay where they are — `(A)`–`(D)`, `(1)`–`(4)` or `(i)`–`(iv)`, whichever the
+  paper uses; only the answer text moves between them.
 - The answer key at the end of each generated paper is rewritten **in the original
   table**, so its format, borders, spans and fonts are identical to the source.
 - Every generated file is re-opened and verified before the run is reported as done.
@@ -31,19 +32,25 @@ points at it whenever it has to skip a question.
 
 ### The two buttons
 
-**Dry run** writes nothing. It reports, for the settings as they stand:
+**Dry run** writes nothing. It reports how many questions are free to move and how many
+will have their options shuffled, broken down per subject; any mistake in the exclusion
+lists, such as a question number this paper does not have; and then **three numbered
+findings**, always in this order and always shown, even when a count is zero:
 
-- how many questions are free to move and how many will have their options shuffled,
-  broken down per subject;
-- every question whose options *cannot* be shuffled with certainty, and why (these keep
-  their original option order and their answer letter never changes);
-- every question that **is** shuffled but whose option labels had to be worked out from an
-  inconsistent layout — see [Shuffled, but worth correcting](#shuffled-but-worth-correcting)
-  below;
-- every question whose option order looks position-dependent — "None of these",
-  "Both (A) and (B)", assertion-reason sets — with a one-click **Add these N to "keep the
-  option order"** button;
-- mistakes in the exclusion lists, such as a question number this paper does not have.
+1. **Question(s) whose options cannot be shuffled with certainty** — these could not be
+   parsed, so they keep their original option order and their answer never changes. Each
+   one says what stopped it and what to change in Word.
+2. **Question(s) shuffled, but worth correcting in the Word document** — shuffled
+   correctly, but their layout had to be worked out; see
+   [Shuffled, but worth correcting](#shuffled-but-worth-correcting) below.
+3. **Question(s) worth keeping in their original option order** — their option text looks
+   position-dependent ("None of these", "Both (A) and (B)"), with a
+   one-click **Add these N to "keep the option order"** button. Nothing is wrong with them;
+   this one is your call, not the tool's.
+
+The three answer three different questions — *what could not be read*, *what was read but
+is worth tidying*, *what was read fine but may not mean the same once its options move* —
+so they are never merged.
 
 **Generate** writes the files, showing two progress bars: overall (`Set 2 of 4 · 1
 generated`) and the current set's step (`Shuffling options — 36% of this set`). The steps
@@ -72,7 +79,7 @@ the shuffler, the tests, the CLI — works without Electron.)
 npm test
 ```
 
-102 unit and end-to-end tests. They build question papers in memory (see
+242 unit and end-to-end tests. They build question papers in memory (see
 `tests/support/PaperFixture.ts`), so they run without any sample document.
 
 To review the UI without Electron and without a real paper:
@@ -109,7 +116,7 @@ npm run cli -- --file "C:\papers\MTP-2.docx" --sets 4 --shuffle-questions --shuf
 | Shuffle question order | Re-orders questions inside each subject. |
 | Keep these question numbers in place | Comma separated printed question numbers (`10,11,19,20`). Ranges like `10-14` also work. These questions stay at their exact position. |
 | Shuffle option order | Permutes the four option contents of each question. |
-| Keep the option order of these questions | Comma separated printed question numbers whose options must not move. Use it for "None of these", "Both (A) and (B)", assertion-reason sets, or any question where option order carries meaning. |
+| Keep the option order of these questions | Comma separated printed question numbers whose options must not move. Use it for "None of these", "Both (A) and (B)", or any question where option order carries meaning. |
 | Number of sets | 1–100. |
 | Seed | Optional — see below. Leave it blank for a normal run. |
 | Keep each question on one page | On by default. A question that no longer fits at the bottom of a page starts on the next page instead of being split across two. See below. |
@@ -259,10 +266,17 @@ Written next to the source paper, in a new folder:
 ```
 <paper folder>/
   question-sets-01/                       <- 02, 03, ... on later runs; never overwritten
-    <paper name> - Set 01.docx
-    <paper name> - Set 02.docx
+    <paper name> - 31-08-2026-13-21-Set-01.docx
+    <paper name> - 31-08-2026-13-21-Set-02.docx
     _generation-report.md
 ```
+
+The date and time are `DD-MM-YYYY-HH-MM` on a 24-hour clock, read from the computer's own
+clock when the run starts. **Every set of one run carries the same stamp**, so a batch
+stays together in a folder listing even when the run crosses a minute boundary, and sets
+from two runs of the same paper can never be confused. The minutes are separated with `-`
+rather than the `:` of a clock reading because Windows does not allow `:` in a file name.
+The same instant is written at the top of `_generation-report.md`.
 
 Each generated paper:
 
@@ -278,8 +292,13 @@ Each generated paper:
 
 `_generation-report.md` records, per run: the run seed, the paper structure, the questions
 whose options could not be shuffled (and why), the questions worth excluding, the
-verification results, and the full `new question -> original question -> answer letter`
+verification results, and the full `new question -> original question -> answer`
 mapping for every set.
+
+The report names options the way the paper names them, reading the style from the paper's
+own answer key: a paper whose key is written `A B C D` gets `A`, `C` and `A→C, B→D, …`,
+while one written `1 2 3 4` gets `1`, `3` and `1→3, 2→4, …`. The mapping table can
+therefore be read straight against the generated set's key without translating anything.
 
 ---
 
@@ -426,13 +445,29 @@ clear error message when they do not hold.
    generated set keeps the tokens its author typed. Every scheme also recognises its fifth
    label, so a five-option question is refused rather than having its fifth option folded
    into the fourth.
-7. **Options may be lettered by Word instead of typed** — either all four (four list
+
+   Where pass order alone is not enough, **the answer key decides**: the scheme the key
+   names its answers in is tried first. That settles the match-the-columns question whose
+   column entries are lettered `(a)…(d)` above real options written `(1)…(4)` — reading
+   letters first would shuffle the column entries. Nothing is guessed; the paper states
+   that its answers are digits, so the digit labels are its options.
+
+7. **A floating picture anchored among the options is layout, not text.** Word places such
+   a picture from the *page*, so the words in its text box are not part of the sentence a
+   reader sees, and the picture does not travel with the text beside it. It is therefore
+   left out when labels are looked for — otherwise a diagram's stray letters (`O A B Cl`)
+   sit in front of the next label and hide it — and it stays in its own paragraph while
+   the answers move around it. A picture in the *middle* of one answer is refused instead:
+   there the words would move to another slot and the picture would stay behind. Questions
+   shuffled with a picture among their options are listed in the report so the author can
+   confirm that no picture belonged to one particular option.
+8. **Options may be lettered by Word instead of typed** — either all four (four list
    paragraphs, first is (A)), or just the first, with `(B)`, `(C)`, `(D)` typed; in the
    latter case a single-item lettered list at or before `(B)` is option (A). A question may also carry a lettered
    *statement* list, so the list written `(%1)` wins over one written `%1.`, and upper case
    wins over lower case; when that still leaves two candidates the question is skipped
    rather than guessed at.
-8. **Only the four option contents move; labels, tabs, spacing and paragraph boundaries do
+9. **Only the four option contents move; labels, tabs, spacing and paragraph boundaries do
    not.** Whitespace at the edges of an option is separator, not content — including a
    space inside the same run as the option text, which is how four options on one line are
    often parted (`…(iii) (D)…`). Letting it travel would glue the next label onto whatever
@@ -441,29 +476,35 @@ clear error message when they do not hold.
    Column alignment is preserved structurally, but because options differ in length the
    text after a tab stop can sit slightly differently, and a paper may gain or lose a page
    through reflow.
-9. **A question is skipped, never guessed at.** If the four options cannot be identified
+10. **A question is skipped, never guessed at.** If the four options cannot be identified
    with certainty, that question keeps its original option order and is listed in the
    report. This happens for options laid out inside a table, options that continue onto
-   another paragraph, options that anchor a floating picture (moving the run would leave
-   the picture behind), questions where two lettered lists could equally be the options, and
+   another paragraph, an option whose whole answer is a floating picture or that has one in
+   the middle of its words, questions where two lettered lists could equally be the options, and
    labels whose opening bracket was inserted from a symbol font — that bracket prints as `(`
    but holds no text, so where the option before it ends cannot be established. The missing
    bracket is the whole signal there: only a label that reads as `A)` is suspect. A label
    that reads as `(A)` has its bracket, so a symbol in front of it is the previous option's
    *content* — an answer of `60Ω` or `15°` sitting last in its column, which after a shuffle
    can land in front of any label — and the question shuffles normally.
-   Where a fallback in assumption 6 or 7 *did* make the options readable, the question is
+   Where a fallback in assumption 6, 7 or 8 *did* make the options readable, the question is
    shuffled but still reported — see
    [Shuffled, but worth correcting](#shuffled-but-worth-correcting). Nothing the tool works
    out from an inconsistent layout stays invisible.
-10. **Semantics are the user's call.** The tool never decides that an option "should not"
-   move; it flags questions whose option text looks position-dependent ("None of these",
-   "Both (A) and (B)", assertion-reason sets) and the UI offers to add them to the
-   exclusion list in one click.
-11. **Every set differs** from the original paper and from the other sets in the same run
+11. **Semantics are the user's call, and the test is position dependence.** The tool never
+    decides that an option "should not" move. It flags a question only when an option's
+    meaning points at something *outside itself* — the options above it ("None of these"),
+    another option by name ("Both (A) and (B)"), or wording printed once as directions
+    above a run of questions — and the UI offers to add those to the exclusion list in one
+    click. It is not flagged for being a *kind* of question: the standard Assertion-Reason
+    options ("Only statement I is true", "Assertion and Reason are true and Reason is the
+    correct explanation of Assertion") each state their own meaning in full, so they move
+    safely and are left alone. The flag reads the **options**, never the stem — a stem that
+    happens to say "all of the above" says nothing about whether the options can move.
+12. **Every set differs** from the original paper and from the other sets in the same run
     (checked over 50 attempts), and no question keeps its original four options in the same
     order unless it was excluded or unshufflable.
-12. **Page breaks are Word's to place, not the tool's.** "Keep each question on one page"
+13. **Page breaks are Word's to place, not the tool's.** "Keep each question on one page"
     adds `w:keepNext` / `w:keepLines` / `w:cantSplit` and lets Word lay the paper out; the
     tool never measures a page and never moves content to make one fit. The only breaks it
     asks for are `w:pageBreakBefore` on each subject heading and on the answer key, and only
@@ -484,21 +525,27 @@ That is the answer for a specific paper. In general:
 | Labels written as roman numerals `(i)…(iv)` or `(I)…(IV)` | Supported — tried after letters and digits, so an item list is not mistaken for the options. |
 | 1, 2 or 4 options per line, or one option per paragraph | Supported. |
 | Options with equations, superscripts, symbols, inline images | Supported - the run moves with its content. |
+| A floating picture anchored among the options (a diagram beside or between them) | Supported for both typed and Word-lettered labels - the answers move, the picture stays exactly where it is, and the question is **reported** so you can check it. |
+| A floating picture in the middle of one option's answer | Question keeps its option order and is listed in the report - the words would move and the picture would not. |
+| Options whose answers are **inline** pictures (`In line with text`) | Supported - the picture moves with its option like any other content. |
+| Options whose answers are **floating** pictures | Question keeps its option order and is listed in the report, naming the fix: set each option picture to *In line with text*. |
+| Spacer paragraphs, a `SECTION B` instruction or the next question's artwork after the last option | Supported - a blank paragraph ends the option list, so trailing material is not read as part of the last option. |
 | Stem spread over several paragraphs, match-the-columns tables, diagrams | Supported - they travel with the question. |
 | No subject headings (or headings the tool does not recognise) | Treated as **one** subject, so shuffling spans the whole paper. Visible in the summary panel as a single `ALL` row - check it. |
 | Options auto-lettered by Word (one option per list paragraph, no typed "(A)") | Supported. |
-| Option (A) lettered by Word, with (B), (C), (D) typed | Supported, and **reported** as worth correcting. |
+| One option lettered by Word with the other three typed, at any position (`(A) (B) [Word letters this one] (D)`) | Supported, and **reported** as worth correcting. |
 | A missing tab before a label (`…and (v) (D) …`) | Supported, and **reported** as worth correcting. |
+| Two options on a line pushed apart with spaces instead of a tab (`…in transmission␣␣␣␣␣(B) …`) | Question keeps its option order and is listed in the report, naming each label to put a tab in front of. |
 | Labels mixing case (`(A) (b) (C) (d)`) | Supported, and **reported** as worth correcting. |
 | Item list `(a)…(d)` above the answer options `(A)…(D)` | Supported — the upper-case run is the options. |
 | A lettered statement list ("A. …") next to the option list ("(A) …") | Supported — the bracketed list is the options — and **reported** as worth correcting. |
 | Two lists that could equally be the options | Question keeps its option order and is listed in the report. |
 | Options laid out inside a table, or a mix of one auto-lettered option and typed labels | Question keeps its option order and is listed in the report. |
-| 3 or 5 options, options continuing onto another paragraph, an option anchoring a floating picture | Question keeps its option order and is listed in the report. |
+| 3 or 5 options, options continuing onto another paragraph, an option whose whole answer is a floating picture | Question keeps its option order and is listed in the report. |
 | A label whose opening bracket was put in with *Insert → Symbol* | Question keeps its option order and is listed in the report. |
 | An option whose *content* is a symbol (`60Ω`, `15°`), sitting right before the next label | Supported - the label has its own bracket, so the symbol is content and moves with it. |
 | Answer key numbers written `1.` or `1)` | Supported. |
-| Answer key answers written `A`, `(A)`, `a`, `1`, `2.`, `iii)` or `(IV)` | Supported — the key's own style is deduced and the new answer is written back in it. |
+| Answer key answers written `A`, `(A)`, `a`, `1`, `2.`, `iii)` or `(IV)` | Supported — the key's own style is deduced, and both the rewritten key and the generation report use it. |
 | Question numbers typed by hand instead of Word numbering | **Hard error** naming the lists it did find. |
 | Each subject restarting numbering at 1 | **Hard error** - a key entry would no longer identify one question. |
 | Answer key missing, or with number and answer in one cell | **Hard error** - the key is not detected. |

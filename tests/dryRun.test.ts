@@ -119,6 +119,40 @@ describe('dryRun', () => {
     const result = await service.generate(settings);
     expect(result.sets[0]!.optionsShuffled).toBe(report.optionsToShuffle);
   });
+
+  it('names options the way the paper names them, not always A-D', async () => {
+    // A paper written "(1) (2) (3) (4)" must never be told about an "Option (A)": the
+    // reader would go looking for a label that is not on the page.
+    await fs.writeFile(
+      sourceFile,
+      await buildPaper(
+        [
+          {
+            subject: 'PHYSICS',
+            startNumber: 1,
+            numId: '1',
+            questions: [
+              // Three options, so the reason names the label it could not find.
+              { stem: 'A short question', optionParagraphs: ['(1)\tone\t(2)\ttwo\t(3)\tthree'], answer: 'A' },
+              ...Array.from({ length: 6 }, (_unused, index) => ({
+                stem: `Filler question ${index + 1}`,
+                optionParagraphs: ['(1)\tone\t(2)\ttwo\t(3)\tthree\t(4)\tfour'],
+                answer: 'A' as const,
+              })),
+            ],
+          },
+        ],
+        { answerKeyAnswerFormat: 'digit' },
+      ),
+    );
+
+    const report = await service.dryRun(request({ setCount: 1 }));
+    const details = report.optionsKeptByTool.map((item) => item.detail).join(' ');
+
+    expect(report.optionsKeptByTool.length).toBeGreaterThan(0);
+    expect(details).toMatch(/1,2,3,4/);
+    expect(details).not.toMatch(/\(?[ABCD]\)?[,)]/);
+  });
 });
 
 describe('progress reporting', () => {
