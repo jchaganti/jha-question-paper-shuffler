@@ -4,8 +4,17 @@
  * The name carries the source paper, the run's date and time, and the set number, so that
  * sets from different runs of the same paper never look alike in a folder listing.
  */
-import { describe, expect, it } from 'vitest';
-import { fileNameTimestamp, setFileName, setLabel } from '../src/core/generate/OutputFolder';
+import { promises as fs } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+  OutputFolderResolver,
+  fileNameTimestamp,
+  readableTimestamp,
+  setFileName,
+  setLabel,
+} from '../src/core/generate/OutputFolder';
 
 /** 31 August 2026, 13:21 local time - the example from the request. */
 const when = new Date(2026, 7, 31, 13, 21, 45);
@@ -50,6 +59,57 @@ describe('fileNameTimestamp', () => {
 
   it('reads midnight as 00', () => {
     expect(fileNameTimestamp(new Date(2026, 11, 25, 0, 0))).toBe('25-12-2026-00-00');
+  });
+});
+
+describe('readableTimestamp', () => {
+  it('writes the same instant with a clock reading, for the report', () => {
+    expect(readableTimestamp(when)).toBe('31-08-2026 at 13:21');
+  });
+
+  it('describes the same minute as the file names do', () => {
+    expect(readableTimestamp(when).replace(' at ', '-').replace(':', '-')).toBe(
+      fileNameTimestamp(when),
+    );
+  });
+});
+
+describe('the output folder', () => {
+  let workingDir = '';
+  let sourceFile = '';
+
+  beforeEach(async () => {
+    workingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'shuffler-folder-'));
+    sourceFile = path.join(workingDir, 'Sample Paper.docx');
+    await fs.writeFile(sourceFile, 'not a real paper');
+  });
+
+  afterEach(async () => {
+    await fs.rm(workingDir, { recursive: true, force: true });
+  });
+
+  it('carries the run date and time, like the files inside it', async () => {
+    const folder = await new OutputFolderResolver().create(sourceFile, when);
+    expect(path.basename(folder)).toBe('question-sets - 31-08-2026-13-21');
+    expect(path.dirname(folder)).toBe(workingDir);
+    // The stamp in the folder name and in a set's name are the same string.
+    expect(setFileName(sourceFile, 1, when)).toContain(fileNameTimestamp(when));
+  });
+
+  it('marks a second run started in the same minute rather than overwriting the first', async () => {
+    const resolver = new OutputFolderResolver();
+    const first = await resolver.create(sourceFile, when);
+    const second = await resolver.create(sourceFile, when);
+    const third = await resolver.create(sourceFile, when);
+
+    expect(path.basename(first)).toBe('question-sets - 31-08-2026-13-21');
+    expect(path.basename(second)).toBe('question-sets - 31-08-2026-13-21-02');
+    expect(path.basename(third)).toBe('question-sets - 31-08-2026-13-21-03');
+  });
+
+  it('never contains a character Windows forbids in a folder name', async () => {
+    const folder = await new OutputFolderResolver().create(sourceFile, when);
+    expect(path.basename(folder)).not.toMatch(/[:\\/*?"<>|]/);
   });
 });
 

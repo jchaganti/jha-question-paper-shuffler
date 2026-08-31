@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-palette="periwinkle">
+<html lang="en">
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;" />
@@ -12,15 +12,6 @@
         <div class="app__title">
           <h1>Question Paper Shuffler</h1>
           <p>Generate multiple sets of a question paper with shuffled questions and options, each with its own answer key.</p>
-        </div>
-        <div class="palette">
-          <label for="palette">Colour</label>
-          <select id="palette">
-            <option value="periwinkle">Periwinkle</option>
-            <option value="mint">Mint</option>
-            <option value="peach">Peach</option>
-            <option value="sand">Warm sand</option>
-          </select>
         </div>
       </header>
 
@@ -135,7 +126,7 @@
             <input id="source-file" type="text" placeholder="No file selected" readonly />
             <button id="browse" type="button" class="button button--secondary">Browse&hellip;</button>
           </div>
-          <p class="hint">Sets are written to a new <code>question-sets-NN</code> folder next to this file.</p>
+          <p class="hint">Sets are written to a new <code>question-sets - date-time</code> folder next to this file, with a report of the run.</p>
         </div>
         <div id="paper-summary" class="summary" hidden></div>
       </section>

@@ -16,6 +16,7 @@ import { NumberingIndex } from '../src/core/parse/NumberingIndex';
 import { PaperParser } from '../src/core/parse/PaperParser';
 import { groupLayoutNotes, questionsWithLayoutNotes } from '../src/shared/layoutNotes';
 import type { GenerationRequest, OptionLayoutIssue, QuestionLayoutNote } from '../src/shared/types';
+import { pdfText } from './support/pdfText';
 import { LIST, buildPaper, defaultSections, type FixtureQuestion, type FixtureSection } from './support/PaperFixture';
 
 /** A paper whose first question is the one under test, padded so the key is detectable. */
@@ -234,20 +235,31 @@ describe('end to end', () => {
 
   it('writes the problem, the questions and the fix into the report file', async () => {
     const result = await service.generate(request());
-    const report = await fs.readFile(result.reportFile, 'utf8');
 
-    expect(report).toContain('## Shuffled, but worth correcting in the Word document');
-    expect(report).toContain('Some options are lettered by Word and the rest typed by hand');
-    expect(report).toContain('Letter all four options the same way');
+    // The heading proves the section reached the written PDF; the cells are asserted on
+    // the document behind it, because a table cell wraps over several lines on the page.
+    expect(pdfText(await fs.readFile(result.reportFile))).toContain(
+      'Shuffled, but worth correcting in the Word document',
+    );
+    const cells = new ReportWriter()
+      .build(request(), result)
+      .blocks.filter((block) => block.kind === 'table')
+      .flatMap((block) => (block as { rows: readonly (readonly string[])[] }).rows)
+      .flat();
+    expect(cells).toContain('Some options are lettered by Word and the rest typed by hand');
+    expect(cells.some((cell) => cell.includes('Letter all four options the same way'))).toBe(true);
   });
 
   it('leaves the section out of the report for a clean paper', async () => {
     await fs.writeFile(sourceFile, await buildPaper(defaultSections()));
     const result = await service.generate(request());
-    const written = new ReportWriter().render(request(), result);
+    const headings = new ReportWriter()
+      .build(request(), result)
+      .blocks.filter((block) => block.kind === 'heading')
+      .map((block) => (block as { text: string }).text);
 
     expect(result.paper.layoutNotes).toEqual([]);
-    expect(written).not.toContain('worth correcting in the Word document');
+    expect(headings).not.toContain('Shuffled, but worth correcting in the Word document');
   });
 
   it('does not confuse an auto-lettered option list with the statement list above it', async () => {

@@ -9,6 +9,7 @@ import { NumberingIndex } from '../src/core/parse/NumberingIndex';
 import { PaperParser } from '../src/core/parse/PaperParser';
 import { OPTION_LETTERS, type GenerationRequest } from '../src/shared/types';
 import { buildPaper, defaultSections } from './support/PaperFixture';
+import { pdfLines, pdfPageCount, pdfText } from './support/pdfText';
 
 let workingDir = '';
 let sourceFile = '';
@@ -66,10 +67,12 @@ describe('GenerationService', () => {
     expect(summary.advisories.map((item) => item.questionNumber)).toContain(5);
   });
 
-  it('writes N files into question-sets-01 and passes its own verification', async () => {
+  it('writes N files into a dated folder and passes its own verification', async () => {
     const result = await service.generate(request({ setCount: 3 }));
 
-    expect(path.basename(result.outputFolder)).toBe('question-sets-01');
+    expect(path.basename(result.outputFolder)).toMatch(
+      /^question-sets - \d{2}-\d{2}-\d{4}-\d{2}-\d{2}$/,
+    );
     // The run's date and time sit in the name, so match the shape rather than a literal.
     // `setFileName.test.ts` pins the exact format.
     expect(result.sets.map((set) => set.fileName)).toEqual([
@@ -84,11 +87,15 @@ describe('GenerationService', () => {
     await expect(fs.stat(result.reportFile)).resolves.toBeTruthy();
   });
 
-  it('creates question-sets-02 on the next run', async () => {
+  it('never overwrites an earlier run, even one started in the same minute', async () => {
     const first = await service.generate(request({ setCount: 1 }));
     const second = await service.generate(request({ setCount: 1 }));
-    expect(path.basename(first.outputFolder)).toBe('question-sets-01');
-    expect(path.basename(second.outputFolder)).toBe('question-sets-02');
+
+    expect(second.outputFolder).not.toBe(first.outputFolder);
+    // Two runs a second apart share a timestamp, so the second folder is marked "-02".
+    expect(path.basename(second.outputFolder)).toMatch(
+      /^question-sets - \d{2}-\d{2}-\d{4}-\d{2}-\d{2}(-02)?$/,
+    );
   });
 
   it('keeps every question inside its own subject', async () => {
@@ -204,21 +211,31 @@ describe('GenerationService', () => {
 
   it('records the run seed in the report', async () => {
     const result = await service.generate(request({ setCount: 1, seed: 'march-batch' }));
-    const report = await fs.readFile(result.reportFile, 'utf8');
-    expect(report).toContain('- Seed: `march-batch`');
+    expect(pdfText(await fs.readFile(result.reportFile))).toContain('Seed march-batch');
+  });
+
+  it('writes the report as a PDF a reader can open', async () => {
+    const result = await service.generate(request({ setCount: 1 }));
+    const pdf = await fs.readFile(result.reportFile);
+
+    expect(result.reportFile.endsWith('_generation-report.pdf')).toBe(true);
+    expect(pdf.subarray(0, 8).toString('latin1')).toBe('%PDF-1.4');
+    expect(pdf.subarray(-7).toString('latin1').trim()).toBe('%%EOF');
+    expect(pdfPageCount(pdf)).toBeGreaterThan(0);
+    expect(pdfText(pdf)).toContain('Question set generation report');
   });
 
   describe('the report names options the way the paper names them', () => {
     /** The mapping rows of the report, which is where answers are quoted. */
-    const mappingRows = (report: string): string[] =>
-      report.split('\n').filter((line) => /^\| \d+ \| \d+ \|/.test(line));
+    const mappingRows = (pdf: Buffer): string[] =>
+      pdfLines(pdf).filter((line) => /^\d+ \d+ \S/.test(line));
 
     it('quotes letters for a paper whose key is written A, B, C, D', async () => {
       const result = await service.generate(request({ setCount: 1 }));
-      const rows = mappingRows(await fs.readFile(result.reportFile, 'utf8'));
+      const rows = mappingRows(await fs.readFile(result.reportFile));
 
       expect(rows.length).toBeGreaterThan(0);
-      expect(rows.join('\n')).toMatch(/\| [ABCD] \| [ABCD] \|/);
+      expect(rows.join('\n')).toMatch(/^\d+ \d+ [ABCD] [ABCD] /m);
       expect(rows.join('\n')).not.toMatch(/\([1-4]\)/);
     });
 
@@ -230,16 +247,15 @@ describe('GenerationService', () => {
         await buildPaper(defaultSections(), { answerKeyAnswerFormat: 'digit-bracketed' }),
       );
       const result = await service.generate(request({ setCount: 1 }));
-      const report = await fs.readFile(result.reportFile, 'utf8');
-      const rows = mappingRows(report);
+      const rows = mappingRows(await fs.readFile(result.reportFile));
 
       expect(rows.length).toBeGreaterThan(0);
       // Original answer and New answer columns.
-      expect(rows.join('\n')).toMatch(/\| \([1-4]\) \| \([1-4]\) \|/);
-      // The option mapping column, e.g. "(1)→(3), (2)→(1), ...".
-      expect(rows.some((row) => /\([1-4]\)→\([1-4]\)/.test(row))).toBe(true);
+      expect(rows.join('\n')).toMatch(/^\d+ \d+ \([1-4]\) \([1-4]\) /m);
+      // The option mapping column. WinAnsi has no arrow, so the PDF spells it "->".
+      expect(rows.some((row) => /\([1-4]\)->\([1-4]\)/.test(row))).toBe(true);
       // No stray A-D anywhere in a mapping row.
-      expect(rows.join('\n')).not.toMatch(/\| [ABCD] \||[ABCD]→/);
+      expect(rows.join('\n')).not.toMatch(/^\d+ \d+ [ABCD] |[ABCD]->/m);
     });
 
     it('quotes roman numerals for a paper whose key is written (i)...(iv)', async () => {
@@ -248,11 +264,11 @@ describe('GenerationService', () => {
         await buildPaper(defaultSections(), { answerKeyAnswerFormat: 'roman-bracketed' }),
       );
       const result = await service.generate(request({ setCount: 1 }));
-      const rows = mappingRows(await fs.readFile(result.reportFile, 'utf8'));
+      const rows = mappingRows(await fs.readFile(result.reportFile));
 
       expect(rows.length).toBeGreaterThan(0);
-      expect(rows.join('\n')).toMatch(/\| \((?:i|ii|iii|iv)\) \| \((?:i|ii|iii|iv)\) \|/);
-      expect(rows.join('\n')).not.toMatch(/\| [ABCD] \||[ABCD]→/);
+      expect(rows.join('\n')).toMatch(/^\d+ \d+ \((?:i|ii|iii|iv)\) \((?:i|ii|iii|iv)\) /m);
+      expect(rows.join('\n')).not.toMatch(/^\d+ \d+ [ABCD] |[ABCD]->/m);
     });
   });
 
@@ -279,9 +295,14 @@ describe('GenerationService', () => {
 
     it('uses that same instant for the report and for GenerationResult', async () => {
       const result = await service.generate(request({ setCount: 1 }));
-      const report = await fs.readFile(result.reportFile, 'utf8');
+      const report = pdfText(await fs.readFile(result.reportFile));
 
-      expect(report).toContain(`- Generated: ${result.generatedAt}`);
+      const at = new Date(result.generatedAt);
+      const two = (n: number) => String(n).padStart(2, '0');
+      expect(report).toContain(
+        `generated ${two(at.getDate())}-${two(at.getMonth() + 1)}-${at.getFullYear()} ` +
+          `at ${two(at.getHours())}:${two(at.getMinutes())}`,
+      );
       const expected = new Date(result.generatedAt);
       const pad = (n: number) => String(n).padStart(2, '0');
       expect(NAME_RE.exec(result.sets[0]!.fileName)![1]).toBe(

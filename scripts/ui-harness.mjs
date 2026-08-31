@@ -147,7 +147,7 @@ window.shuffler = {
       sets.push({
         setNumber,
         fileName: 'MTP-2-PCB-XI-2027_4961 - Set ' + String(setNumber).padStart(2, '0') + '.docx',
-        filePath: 'D:\\\\papers\\\\question-sets-01\\\\set.docx',
+        filePath: 'D:\\\\papers\\\\question-sets - 31-08-2026-13-21\\\\set.docx',
         seed: 'demo#set' + setNumber,
         questionsMoved: 170 + setNumber,
         optionsShuffled: 160,
@@ -163,8 +163,8 @@ window.shuffler = {
     return {
       ok: true,
       value: {
-        outputFolder: 'D:\\\\papers\\\\question-sets-01',
-        reportFile: 'D:\\\\papers\\\\question-sets-01\\\\_generation-report.md',
+        outputFolder: 'D:\\\\papers\\\\question-sets - 31-08-2026-13-21',
+        reportFile: 'D:\\\\papers\\\\question-sets - 31-08-2026-13-21\\\\_generation-report.pdf',
         seed: request.seed || 'c594e1fd-be30-4738-8804-870967699570',
         paper: PAPER,
         sets,

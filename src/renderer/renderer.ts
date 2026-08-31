@@ -21,46 +21,6 @@ const el = <T extends HTMLElement>(id: string): T => {
   return node as T;
 };
 
-/**
- * Page colour.
- *
- * The palettes themselves live in styles.css, one block each, selected by `data-palette`
- * on <html>: the page's Content-Security-Policy allows no inline style, so the colours
- * cannot be written onto the element from here. The choice is remembered per machine;
- * when it cannot be (storage disabled, or the file opened from a data: URL in the UI
- * harness) the app still works and simply opens on the default.
- */
-const PALETTES = ['periwinkle', 'mint', 'peach', 'sand'] as const;
-const DEFAULT_PALETTE = PALETTES[0];
-const PALETTE_KEY = 'shuffler.palette';
-
-const paletteSelect = el<HTMLSelectElement>('palette');
-
-function applyPalette(name: string): void {
-  const palette = (PALETTES as readonly string[]).includes(name) ? name : DEFAULT_PALETTE;
-  document.documentElement.dataset.palette = palette;
-  paletteSelect.value = palette;
-}
-
-applyPalette(readStoredPalette());
-
-paletteSelect.addEventListener('change', () => {
-  applyPalette(paletteSelect.value);
-  try {
-    localStorage.setItem(PALETTE_KEY, paletteSelect.value);
-  } catch {
-    // Storage unavailable: the colour still applies, it just is not remembered.
-  }
-});
-
-function readStoredPalette(): string {
-  try {
-    return localStorage.getItem(PALETTE_KEY) ?? DEFAULT_PALETTE;
-  } catch {
-    return DEFAULT_PALETTE;
-  }
-}
-
 const sourceFileInput = el<HTMLInputElement>('source-file');
 const browseButton = el<HTMLButtonElement>('browse');
 const summaryPanel = el<HTMLElement>('paper-summary');

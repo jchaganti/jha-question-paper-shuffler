@@ -1,7 +1,15 @@
+/*
+ * Warm sand, the app's one palette.
+ *
+ * The colours are custom properties here rather than values written onto the element,
+ * because the page's Content-Security-Policy (style-src 'self') allows no inline style.
+ *
+ * The watermark is drawn in one blue; --watermark-tint turns it toward the palette.
+ */
 :root {
-  --bg: #e9edf7;
+  --bg: #f2ebdd;
   --surface: #ffffff;
-  --border: #dee4f0;
+  --border: #e7ddc9;
   --text: #1c2024;
   --muted: #5f6a80;
   --accent: #2f6feb;
@@ -12,62 +20,23 @@
   --radius: 10px;
   --shadow: 0 1px 2px rgba(38, 50, 90, 0.06), 0 6px 20px rgba(38, 50, 90, 0.06);
 
-  /* Pastel page wash: three soft blooms over a periwinkle base. Cards sit on top of it
-     nearly opaque, so the colour is felt around the working area rather than inside it. */
-  --page: #eef1fa;
-  --wash-1: rgba(140, 160, 232, 0.32);
-  --wash-2: rgba(190, 158, 226, 0.26);
-  --wash-3: rgba(138, 202, 184, 0.24);
-  --card: rgba(255, 255, 255, 0.93);
-  --watermark-opacity: 0.45;
-  --watermark-tint: none;
-}
-
-/*
- * Page colours the user picks from the Colour menu.
- *
- * Each palette is a block here rather than custom properties written onto the element,
- * because the page's Content-Security-Policy (style-src 'self') allows no inline style.
- * The renderer only sets data-palette on <html>. Periwinkle is the default and lives in
- * :root above, so an unknown or missing value still lands on a complete palette.
- *
- * The watermark is drawn in one blue; --watermark-tint turns it toward each palette.
- */
-:root[data-palette='mint'] {
-  --bg: #e6f1ec;
-  --border: #d8e8e0;
-  --page: #edf6f1;
-  --wash-1: rgba(132, 196, 170, 0.30);
-  --wash-2: rgba(160, 196, 232, 0.22);
-  --wash-3: rgba(214, 206, 160, 0.20);
-  --watermark-tint: hue-rotate(-58deg);
-}
-
-:root[data-palette='peach'] {
-  --bg: #f7e9e3;
-  --border: #f0dcd4;
-  --page: #fbf0ec;
-  --wash-1: rgba(238, 168, 142, 0.26);
-  --wash-2: rgba(226, 166, 196, 0.22);
-  --wash-3: rgba(198, 182, 232, 0.20);
-  --watermark-tint: hue-rotate(146deg);
-}
-
-:root[data-palette='sand'] {
-  --bg: #f2ebdd;
-  --border: #e7ddc9;
+  /* Pastel page wash: three soft blooms over a sand base. Cards sit on top of it nearly
+     opaque, so the colour is felt around the working area rather than inside it. */
   --page: #f7f2e9;
   --wash-1: rgba(216, 190, 140, 0.28);
   --wash-2: rgba(196, 178, 214, 0.20);
   --wash-3: rgba(150, 192, 180, 0.20);
+  --card: rgba(255, 255, 255, 0.93);
+  --watermark-opacity: 0.45;
   --watermark-tint: hue-rotate(172deg);
 }
 
 @media (prefers-color-scheme: dark) {
+  /* The same palette over a dark base: hue kept, weight dropped right down. */
   :root {
-    --bg: #1a1d24;
+    --bg: #201d16;
     --surface: #1e2127;
-    --border: #2e333c;
+    --border: #352f24;
     --text: #e7e9ee;
     --muted: #9aa2b1;
     --accent: #4c8dff;
@@ -76,43 +45,12 @@
     --bad: #ff7a6e;
     --shadow: none;
 
-    --page: #14161c;
-    --wash-1: rgba(86, 108, 184, 0.22);
-    --wash-2: rgba(128, 98, 172, 0.18);
-    --wash-3: rgba(74, 138, 124, 0.16);
-    --card: rgba(30, 33, 39, 0.9);
-    --watermark-opacity: 0.3;
-    --watermark-tint: none;
-  }
-
-  /* The same four palettes over the dark base: hue kept, weight dropped right down. */
-  :root[data-palette='mint'] {
-    --bg: #1a201d;
-    --border: #2c352f;
-    --page: #141816;
-    --wash-1: rgba(88, 168, 140, 0.18);
-    --wash-2: rgba(96, 132, 180, 0.14);
-    --wash-3: rgba(168, 158, 104, 0.12);
-    --watermark-tint: hue-rotate(-58deg);
-  }
-
-  :root[data-palette='peach'] {
-    --bg: #221b19;
-    --border: #382c28;
-    --page: #1a1413;
-    --wash-1: rgba(206, 122, 92, 0.18);
-    --wash-2: rgba(186, 116, 150, 0.14);
-    --wash-3: rgba(140, 124, 184, 0.12);
-    --watermark-tint: hue-rotate(146deg);
-  }
-
-  :root[data-palette='sand'] {
-    --bg: #201d16;
-    --border: #352f24;
     --page: #181510;
     --wash-1: rgba(190, 158, 96, 0.18);
     --wash-2: rgba(146, 128, 172, 0.13);
     --wash-3: rgba(102, 148, 134, 0.13);
+    --card: rgba(30, 33, 39, 0.9);
+    --watermark-opacity: 0.3;
     --watermark-tint: hue-rotate(172deg);
   }
 }
@@ -180,20 +118,6 @@ body::before {
 
 .app__header p {
   margin: 0 0 24px;
-  color: var(--muted);
-}
-
-/* Page colour: app chrome, so it sits with the title rather than among the settings. */
-.palette {
-  flex: none;
-}
-
-.palette label {
-  margin-bottom: 4px;
-  font-size: 12px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
   color: var(--muted);
 }
 

@@ -12,6 +12,7 @@ import { PaperParser, isEmptyParagraph } from '../src/core/parse/PaperParser';
 import type { ParsedPaper } from '../src/core/parse/PaperModel';
 import type { GenerationRequest } from '../src/shared/types';
 import { buildPaper, defaultSections, plainParagraphXml } from './support/PaperFixture';
+import { pdfText } from './support/pdfText';
 
 let workingDir = '';
 let sourceFile = '';
@@ -375,8 +376,8 @@ describe('generation with page flow', () => {
 
   it('records the setting in the generation report', async () => {
     const result = await service.generate(request());
-    const report = await fs.readFile(result.reportFile, 'utf8');
-    expect(report).toContain('Keep each question on one page: yes');
-    expect(report).toContain('Questions marked to stay whole on one page: 7');
+    const report = pdfText(await fs.readFile(result.reportFile));
+    expect(report).toContain('One question per page yes');
+    expect(report).toContain('Kept whole on a page 7');
   });
 });

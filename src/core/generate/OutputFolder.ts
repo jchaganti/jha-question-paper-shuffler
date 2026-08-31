@@ -1,17 +1,22 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 
-export const OUTPUT_FOLDER_PREFIX = 'question-sets-';
+export const OUTPUT_FOLDER_PREFIX = 'question-sets - ';
 
 /**
- * Creates the next free `question-sets-NN` folder next to the source paper, so a new
- * run never overwrites the sets produced by an earlier run.
+ * Creates the folder for one run next to the source paper: `question-sets - 31-08-2026-13-21`.
+ *
+ * The date and time are the run's own, the same stamp every file inside the folder carries,
+ * so a folder can be matched to its sets at a glance and runs sort in the order they were
+ * made. Two runs started in the same minute would collide, so the second gets `-02`, the
+ * third `-03`, and so on - a new run never overwrites an earlier one's sets.
  */
 export class OutputFolderResolver {
-  async create(sourceFile: string): Promise<string> {
+  async create(sourceFile: string, when: Date): Promise<string> {
     const parent = path.dirname(path.resolve(sourceFile));
-    for (let n = 1; n <= 999; n++) {
-      const folder = path.join(parent, `${OUTPUT_FOLDER_PREFIX}${String(n).padStart(2, '0')}`);
+    const base = path.join(parent, `${OUTPUT_FOLDER_PREFIX}${fileNameTimestamp(when)}`);
+    for (let n = 1; n <= 99; n++) {
+      const folder = n === 1 ? base : `${base}-${pad(n)}`;
       try {
         await fs.mkdir(folder, { recursive: false });
         return folder;
@@ -20,7 +25,9 @@ export class OutputFolderResolver {
         throw error;
       }
     }
-    throw new Error(`Could not create an output folder in ${parent}: 999 "${OUTPUT_FOLDER_PREFIX}NN" folders already exist.`);
+    throw new Error(
+      `Could not create an output folder in ${parent}: 99 runs are already recorded for ${fileNameTimestamp(when)}.`,
+    );
   }
 }
 
@@ -39,6 +46,20 @@ export function fileNameTimestamp(when: Date): string {
   return (
     `${pad(when.getDate())}-${pad(when.getMonth() + 1)}-${when.getFullYear()}` +
     `-${pad(when.getHours())}-${pad(when.getMinutes())}`
+  );
+}
+
+/**
+ * The same instant written for a person to read: `31-08-2026 at 13:21`.
+ *
+ * The report is the one place with room for a real clock reading, so it uses the `:` a file
+ * name may not contain - and the same local time, so the report and the folder it sits in
+ * plainly describe the same run.
+ */
+export function readableTimestamp(when: Date): string {
+  return (
+    `${pad(when.getDate())}-${pad(when.getMonth() + 1)}-${when.getFullYear()}` +
+    ` at ${pad(when.getHours())}:${pad(when.getMinutes())}`
   );
 }
 

@@ -79,7 +79,7 @@ the shuffler, the tests, the CLI — works without Electron.)
 npm test
 ```
 
-242 unit and end-to-end tests. They build question papers in memory (see
+265 unit and end-to-end tests. They build question papers in memory (see
 `tests/support/PaperFixture.ts`), so they run without any sample document.
 
 To review the UI without Electron and without a real paper:
@@ -133,7 +133,7 @@ question for question and option for option.
 - **Leave it blank** for normal use. A fresh random seed is invented for the run, so every
   run produces different sets.
 - **The seed used is always reported back** — shown under "Generated sets" with a *Reuse
-  this seed* button, printed by the CLI, and recorded in `_generation-report.md`.
+  this seed* button, printed by the CLI, and recorded in `_generation-report.pdf`.
 - **Type a seed** (anything: `march-batch`, `2026-08-02-mock-2`, or a seed you were given
   back) to reproduce a run exactly.
 
@@ -152,7 +152,7 @@ per set in the report; the one you re-enter is the run seed.
 
 A seed is not a secret or a password — anyone with the seed and the original paper can
 reproduce the sets. The report already contains the full answer mapping, so keep the whole
-`question-sets-NN` folder as confidential as the paper itself.
+`question-sets - …` folder as confidential as the paper itself.
 
 ### Shuffled, but worth correcting
 
@@ -181,7 +181,7 @@ Counts on the sample papers, out of 180 questions (100 for Animal Kingdom):
 
 A question is reported whatever the settings say — the document is worth fixing even when
 that question is in the "keep the option order" list. The same grouping goes into
-`_generation-report.md` and into `--dry-run` / `--inspect` on the command line.
+`_generation-report.pdf` and into `--dry-run` / `--inspect` on the command line.
 
 ### Keep each question on one page
 
@@ -265,18 +265,19 @@ Written next to the source paper, in a new folder:
 
 ```
 <paper folder>/
-  question-sets-01/                       <- 02, 03, ... on later runs; never overwritten
+  question-sets - 31-08-2026-13-21/       <- one folder per run; never overwritten
     <paper name> - 31-08-2026-13-21-Set-01.docx
     <paper name> - 31-08-2026-13-21-Set-02.docx
-    _generation-report.md
+    _generation-report.pdf
 ```
 
 The date and time are `DD-MM-YYYY-HH-MM` on a 24-hour clock, read from the computer's own
-clock when the run starts. **Every set of one run carries the same stamp**, so a batch
-stays together in a folder listing even when the run crosses a minute boundary, and sets
-from two runs of the same paper can never be confused. The minutes are separated with `-`
-rather than the `:` of a clock reading because Windows does not allow `:` in a file name.
-The same instant is written at the top of `_generation-report.md`.
+clock when the run starts. **The folder and every set inside it carry the same stamp**, so
+a batch stays together in a folder listing even when the run crosses a minute boundary, and
+sets from two runs of the same paper can never be confused. The minutes are separated with
+`-` rather than the `:` of a clock reading because Windows does not allow `:` in a file
+name; the report, which is not a file name, writes it `31-08-2026 at 13:21`. Two runs
+started in the same minute are kept apart by a `-02`, `-03` on the second folder onwards.
 
 Each generated paper:
 
@@ -290,7 +291,7 @@ Each generated paper:
 - keeps every question whole on one page (see below);
 - starts each subject, and the answer key, on a page of its own (see below).
 
-`_generation-report.md` records, per run: the run seed, the paper structure, the questions
+`_generation-report.pdf` records, per run: the run seed, the paper structure, the questions
 whose options could not be shuffled (and why), the questions worth excluding, the
 verification results, and the full `new question -> original question -> answer`
 mapping for every set.

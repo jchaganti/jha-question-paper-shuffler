@@ -60,7 +60,7 @@ exact box/label to fix, an entry in the in-app **best practices** list
 ```bash
 npm run build        # tsc main (CommonJS) + renderer (ESM) + copy static assets
 npm start            # build, then launch Electron
-npx vitest run       # 242 tests, 19 files
+npx vitest run       # 265 tests, 20 files
 npm run cli -- --file "paper.docx" --shuffle-questions --shuffle-options --dry-run
 node scripts/ui-harness.mjs   # dist/web/renderer/harness.html — real UI, stubbed backend
 ```
@@ -108,6 +108,8 @@ SetVerifier        re-open the written file and prove four properties
 | `core/generate/PageFlow.ts` | `keepNext`/`keepLines`/`cantSplit`/`pageBreakBefore` |
 | `core/generate/Signatures.ts` | question fingerprint, invariant under option shuffling |
 | `core/verify/SetVerifier.ts` | re-parses the written file; the safety net |
+| `core/report/Pdf.ts` | the minimal PDF writer - fonts, text, rules, xref |
+| `core/report/ReportPdf.ts` | typesets a `ReportDocument` onto pages |
 | `shared/answerStyle.ts` | the only boundary between internal A-D slots and the paper's own option names |
 | `main/` | Electron main, preload bridge, IPC channels |
 | `renderer/` | UI. **`renderer.ts` must have zero runtime imports** |
@@ -202,6 +204,10 @@ Commits, oldest first:
    with a *different* answer filled in on each. `--watermark-tint` hue-rotates it per
    palette. Choice persisted in `localStorage` (every access wrapped — it throws on the
    `data:` URL the harness runs from).
+
+   **Superseded by item 24**: the picker, the other three palettes and the `localStorage`
+   handling are gone. Warm sand's values sit in `:root`; the wash, the watermark and its
+   tint are unchanged.
 
 ---
 
@@ -454,6 +460,47 @@ Commits, oldest first:
 
     242 tests, 19 files.
 
+22. **The output folder carries the run's date and time too.**
+    `question-sets - 31-08-2026-13-21`, from the same `runStartedAt` that names every file
+    inside it, so a folder and its sets plainly describe one run and runs sort by when they
+    were made. `OutputFolderResolver.create` takes the `Date`; the old `NN` counter now only
+    breaks a tie between two runs started in the same minute (`-02`, `-03`, …), which is
+    what keeps the "a run never overwrites an earlier one" guarantee. The folder name does
+    **not** carry the paper name - two papers shuffled in the same minute land in
+    `… -13-21` and `… -13-21-02`, and the files inside are named by paper.
+
+23. **The report is a PDF, written by hand.** `_generation-report.md` became
+    `_generation-report.pdf`. `ReportWriter.build` now returns a `ReportDocument` (headings,
+    paragraphs, `facts`, `table`) and `renderReportPdf` typesets it, so *what the report
+    says* and *how it looks* are testable apart.
+
+    `src/core/report/Pdf.ts` writes the PDF: three standard Type 1 fonts (nothing embedded),
+    uncompressed content streams, a real xref table. Chosen over Electron's `printToPDF`
+    because the CLI - which runs every regression - has no Electron, and over a library
+    because the project ships two dependencies and a page of text and rules needs neither.
+    The output is deterministic, so the same run gives the same bytes.
+
+    Two traps it already fell into, both pinned by tests in `tests/reportPdf.test.ts`:
+    - **Measure what you will print.** WinAnsi has no `→`, so `A→C` is spelled `A->C`;
+      `textWidth` and `encode` both go through `winAnsi()`, or the mapping column would
+      have been measured three characters short and run into the next column.
+    - **A cell that fits exactly must not wrap.** A column is sized from its widest cell, so
+      that cell measures as exactly the width available - one floating-point step turned
+      "Subject" into "Subjec" over "t". Hence `CELL_SLACK`.
+
+    Column widths: `weight` marks the columns carrying prose. Those take any spare width,
+    and those give width back when the table is too wide - a subject column keeps its size,
+    because "CHEMISTRY" broken over two lines is worse than a taller reason column.
+
+    `tests/support/pdfText.ts` reads the text back out, so the tests still assert on the
+    file that was written rather than on the model behind it.
+
+24. **One palette, no picker.** The Colour menu is gone and Warm sand's values live in
+    `:root` (with the dark-scheme block). This closes open issue 2 - there is no stored
+    choice left to apply after load, so nothing can flash.
+
+    265 tests, 20 files.
+
 ## 5 · Decisions worth not relitigating
 
 | Decision | Why |
@@ -478,21 +525,26 @@ Commits, oldest first:
 | The answer key breaks ties between label schemes | A match-the-columns list `(a)-(d)` above real `(1)-(4)` options otherwise wins on pass order alone |
 | One timestamp per run, not per file | A batch must stay together in a folder listing; per-file stamping splits it whenever a run crosses a minute |
 | `-` between hours and minutes, not `:` | Windows forbids `:` in a file name - a literal clock reading could not be saved |
-| Palettes as CSS blocks + one attribute | CSP allows no inline style; also keeps all colour in one file |
+| A run of spaces before a label is refused, not read | It is also the shape of "Both (A) and (B)"; the fix is a keystroke in Word, and the refusal now names the labels |
+| The PDF is written by hand, not by Electron or a library | Every regression run goes through the CLI, which has no Electron; a page of text and rules needs no third dependency, and the bytes stay deterministic |
+| `ReportDocument` between the writer and the page | What the report says is testable without a PDF, and the typesetting without a generation run |
+| Measuring and drawing share one WinAnsi pass | `→` prints as `->`; measuring the original string would reserve two characters too few and overrun the column |
+| Only weighted (prose) columns give up width | A subject column that wraps reads worse than a taller reason column, and only prose loses nothing by taking another line |
+| One palette, written into `:root` | The picker was a setting nobody needed to change; removing it also removed the startup flash it caused |
 | Watermark on `body::before`, not `body` | Lets the theme control its opacity and tint independently of the wash |
 
 ---
 
 ## 6 · Current state
 
-- **242 tests pass**, 19 files. `npx vitest run`.
+- **265 tests pass**, 20 files. `npx vitest run`.
 - Renderer type-checks; UI harness builds; Electron launches clean.
 
 ### Paper corpus (`C:\ps\q-paper`)
 
 | Paper | Q | Options shuffled | Status |
 | --- | --- | --- | --- |
-| ANIMAL KINGDOM (TEST-1) | 100 | 95 | Works — **but see open issue 1** |
+| ANIMAL KINGDOM (TEST-1) | 100 | 96 | Works — **but see open issue 1** |
 | Extra MTP-1-XI-2023 | 50 | 50 | Works — every question |
 | MTP-2-PCB-XI-2027 Group A | 180 | 175 | Works |
 | MTP-2-PCB-XI-2027 Group B | 180 | 174 | Works |
@@ -501,7 +553,7 @@ Commits, oldest first:
 | MTP-2-XI-2023 | 200 | 158 | Works (symbol-bracket questions skipped) |
 | Nano MTP 2 Physics | 12 | 11 | Works |
 | Nano MTP Chemistry-1 | 12 | 12 | Works |
-| Alternating Current XII-2024 | 100 | 96 | Works — the `57,` box has since been retyped in Word |
+| Alternating Current XII-2024 | 100 | 97 | Works — the `57,` box and Q75’s space-run separator have since been retyped in Word |
 | FST-1-Rep-2024 | 200 | 183 | Works — unblocked by the format deduction below |
 | CURRENT ELECTRICITY (Wheatstone) | — | — | Blocked: question numbers typed by hand |
 
@@ -546,11 +598,10 @@ It is not caused by anything done this session.
 **This needs the user's decision** before implementing, because (a) changes coverage
 numbers and (c) leaves a known bad output in place. My recommendation is (a).
 
-### 2. Palette flash at startup
+### 2. Palette flash at startup — **closed**
 
-CSP forbids an inline script, so the palette is applied by the deferred module script; a
-non-default choice can show one frame of Periwinkle. Fix if wanted: have the main process
-substitute the saved palette into the `<html>` tag before loading the page. Cosmetic.
+The colour picker is gone (item 24) and Warm sand is written straight into `:root`, so
+there is no stored choice to apply after the page loads and nothing to flash.
 
 ### 3. One paper unsupported by design
 
@@ -572,13 +623,13 @@ deduced, and the paper works.)
 3. **Re-run the whole corpus** after any parser change and compare *options shuffled* per
    paper against the table in §6. A silent drop means a new false-positive refusal; a
    silent rise means a check stopped firing.
-4. Optional: palette flash (issue 2), and the table-grid option reader that was offered
-   and declined earlier — options laid out inside a table are currently skipped.
+4. Optional: the table-grid option reader that was offered and declined earlier —
+   options laid out inside a table are currently skipped.
 
 ### How to re-run the corpus
 
 There is no committed script for this; it was done inline. Copy each paper to a temp
-directory first — the CLI writes `question-sets-NN` next to the source file, and you must
+directory first — the CLI writes a `question-sets - date-time` folder next to the source file, and you must
 not litter the user's folder.
 
 ```bash

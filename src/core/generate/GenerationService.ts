@@ -156,11 +156,11 @@ export class GenerationService {
     onProgress({ stage: 'planning', message: 'Planning the sets...', fraction: 0 });
     // Resolved here (not inside the planner) so the exact seed can be reported back.
     const runSeed = resolveSeed(request.seed);
-    // Read once, so every set of this run carries the same date and time in its name even
-    // if the run crosses a minute boundary.
+    // Read once, so the folder and every set of this run carry the same date and time in
+    // their names even if the run crosses a minute boundary.
     const runStartedAt = new Date();
     const plans = this.planner.plan({ sections, shufflableOptionQuestions, request, baseSeed: runSeed });
-    const folder = await this.folders.create(request.sourceFile);
+    const folder = await this.folders.create(request.sourceFile, runStartedAt);
 
     const setCount = plans.length;
     /** Turns "x% of set n" into "y% of the whole run". */
