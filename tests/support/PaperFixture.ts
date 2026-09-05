@@ -107,11 +107,15 @@ export const oleOptionParagraph = (label: string, relationshipId: string): strin
 
 /**
  * An option line whose label brackets were put in with Insert > Symbol: the "(" is a
- * `w:sym` that prints as a bracket but holds no text, so reading the paragraph gives
- * "A) ... B) ..." with the brackets invisible.
+ * `w:sym` carrying no text of its own.
+ *
+ * The font decides whether that bracket can be read. `Symbol` has a published encoding in
+ * which 0x28 is a left parenthesis, so the label reads as "(A)" like any other. A picture
+ * font such as `Wingdings` numbers drawings instead of characters, so nothing can be read
+ * from it and the paragraph gives "A) ... B) ..." with the brackets invisible.
  */
-export const symbolBracketOptionParagraph = (values: readonly string[]): string => {
-  const sym = '<w:r><w:sym w:font="Symbol" w:char="F028"/></w:r>';
+export const symbolBracketOptionParagraph = (values: readonly string[], font = 'Symbol'): string => {
+  const sym = `<w:r><w:sym w:font="${font}" w:char="F028"/></w:r>`;
   const label = (letter: string): string => `${sym}<w:r><w:t xml:space="preserve">${letter}) </w:t></w:r><w:r><w:tab/></w:r>`;
   return (
     '<w:p><w:pPr><w:pStyle w:val="ListParagraph"/></w:pPr>' +

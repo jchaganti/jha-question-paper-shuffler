@@ -400,9 +400,10 @@ export class OptionBlockParser {
         ok: false,
         reason: 'label-bracket-is-a-symbol',
         detail:
-          `Option label ${shownLabel(OPTION_LETTERS.indexOf(symbolLabel))} follows a character inserted ` +
-          'from a symbol font, which is how an opening bracket typed with Insert > Symbol appears. That ' +
-          'character carries no readable text, so where the option before it ends cannot be established.',
+          `Option label ${shownLabel(OPTION_LETTERS.indexOf(symbolLabel))} follows a character from a ` +
+          'picture font such as Wingdings, which is what an opening bracket looks like when it is picked ' +
+          'from one of those fonts in Insert > Symbol. Such a character holds no text, so where the ' +
+          'option before it ends cannot be established.',
       };
     }
 
@@ -575,19 +576,24 @@ export class OptionBlockParser {
 }
 
 /**
- * Finds a label whose opening bracket was typed as a symbol-font character.
+ * Finds a label whose opening bracket was typed as a character from a font this tool
+ * cannot read.
  *
- * Such a bracket is a `w:sym`: it prints as "(" but holds no text, so reading the
- * paragraph gives "A)" and the bracket looks like the tail of the *previous* option's
- * content. The parser cannot tell the two apart, so the question is refused rather than
- * shuffled with a guessed boundary - moving the option would leave the bracket behind.
+ * Such a bracket is a `w:sym` holding no text of its own, so reading the paragraph gives
+ * "A)" and the bracket looks like the tail of the *previous* option's content. The parser
+ * cannot tell the two apart, so the question is refused rather than shuffled with a guessed
+ * boundary - moving the option would leave the bracket behind.
+ *
+ * A bracket typed in the Symbol font, which is how Insert > Symbol writes one by default,
+ * is not this case: its code is decoded, the label reads as `(A)` like any other, and this
+ * check never sees it. What is left is a picture font - Wingdings and its relatives - whose
+ * codes name drawings rather than characters.
  *
  * The missing bracket is the whole signal, so only a label that read as `A)` is suspect. A
  * label that read as `(A)` has its bracket, and a symbol in front of it is the previous
- * option's content - an answer of "∞" or "°C" sitting last in its column, which after a
- * shuffle can land in front of any label.
+ * option's content, which after a shuffle can land in front of any label.
  *
- * Returns the letter of the offending label, or undefined when every label is plain text.
+ * Returns the letter of the offending label, or undefined when every label is readable.
  */
 function symbolBeforeLabel(
   flat: readonly Atom[],
@@ -599,7 +605,7 @@ function symbolBeforeLabel(
     if (range.to <= range.from || range.bracketed) continue;
     let previous = range.from - 1;
     while (previous >= 0 && flat[previous]!.blank) previous--;
-    if (previous >= 0 && flat[previous]!.symbol) return OPTION_LETTERS[i];
+    if (previous >= 0 && flat[previous]!.unreadableSymbol) return OPTION_LETTERS[i];
   }
   return undefined;
 }

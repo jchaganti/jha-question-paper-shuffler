@@ -96,6 +96,33 @@ export class ReportWriter {
       });
     }
 
+    if (paper.pinnedQuestions.length > 0) {
+      blocks.push({ kind: 'heading', text: 'Questions held in place by a picture' });
+      blocks.push({
+        kind: 'paragraph',
+        text:
+          'A floating picture is drawn downwards from the paragraph it is anchored to, so a ' +
+          'picture anchored at the end of one question can be the artwork of the next. These ' +
+          'questions keep their original positions in every set; everything else was shuffled ' +
+          'around them.',
+      });
+      blocks.push({
+        kind: 'table',
+        columns: [
+          { header: 'Questions' },
+          { header: 'Subject' },
+          { header: 'Why', weight: 1 },
+          { header: 'Fix', weight: 1 },
+        ],
+        rows: paper.pinnedQuestions.map((group) => [
+          group.questionNumbers.join(', '),
+          group.subject,
+          group.detail,
+          group.fix,
+        ]),
+      });
+    }
+
     if (paper.layoutNoteGroups.length > 0) {
       blocks.push({ kind: 'heading', text: 'Shuffled, but worth correcting in the Word document' });
       blocks.push({

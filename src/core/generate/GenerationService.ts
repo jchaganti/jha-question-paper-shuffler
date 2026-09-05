@@ -18,6 +18,7 @@ import type { IOptionSetParser } from '../options/OptionSet';
 import { OptionSetParser } from '../options/OptionSetParser';
 import { NumberingIndex } from '../parse/NumberingIndex';
 import { PaperParser } from '../parse/PaperParser';
+import { pinnedQuestionNumbers, questionsPinnedByPictures } from '../parse/BoundaryPictures';
 import type { ParsedPaper } from '../parse/PaperModel';
 import { ShufflePlanner, resolveSeed } from '../shuffle/ShufflePlanner';
 import { SetVerifier } from '../verify/SetVerifier';
@@ -65,6 +66,9 @@ export class GenerationService {
     const questionExclusions = new Set(request.questionExclusions);
     const optionExclusions = new Set(request.optionExclusions);
     const unshufflable = new Set(summary.unshufflableOptions.map((item) => item.questionNumber));
+    // Kept separate from the user's own list, so a number the tool pinned is never reported
+    // back as something the user asked for - or as a number this paper does not have.
+    const pinned = new Set(pinnedQuestionNumbers(summary.pinnedQuestions));
     const allNumbers = new Set(
       paper.sections.flatMap((section) => section.blocks.map((block) => block.printedNumber)),
     );
@@ -74,7 +78,9 @@ export class GenerationService {
       return {
         subject: section.subject,
         questionCount: numbers.length,
-        movable: request.shuffleQuestions ? numbers.filter((n) => !questionExclusions.has(n)).length : 0,
+        movable: request.shuffleQuestions
+          ? numbers.filter((n) => !questionExclusions.has(n) && !pinned.has(n)).length
+          : 0,
         optionsShuffled: request.shuffleOptions
           ? numbers.filter((n) => !optionExclusions.has(n) && !unshufflable.has(n)).length
           : 0,
@@ -118,6 +124,8 @@ export class GenerationService {
       optionsToShuffle: subjects.reduce((sum, subject) => sum + subject.optionsShuffled, 0),
       optionsKeptByUser: [...optionExclusions].filter((n) => allNumbers.has(n)).sort((a, b) => a - b),
       optionsKeptByTool: summary.unshufflableOptions,
+      // Only worth saying when questions were going to move at all.
+      questionsKeptByTool: request.shuffleQuestions ? summary.pinnedQuestions : [],
       // No point suggesting a question whose options are already left alone.
       suggestedForExclusion: summary.advisories.filter(
         (item) => !optionExclusions.has(item.questionNumber) && !unshufflable.has(item.questionNumber),
@@ -159,7 +167,15 @@ export class GenerationService {
     // Read once, so the folder and every set of this run carry the same date and time in
     // their names even if the run crosses a minute boundary.
     const runStartedAt = new Date();
-    const plans = this.planner.plan({ sections, shufflableOptionQuestions, request, baseSeed: runSeed });
+    // A question pinned by a picture anchored across its boundary is excluded from the
+    // re-ordering exactly as if the user had listed it, so the planner needs no new concept.
+    const planRequest: GenerationRequest = {
+      ...request,
+      questionExclusions: [
+        ...new Set([...request.questionExclusions, ...pinnedQuestionNumbers(summary.pinnedQuestions)]),
+      ],
+    };
+    const plans = this.planner.plan({ sections, shufflableOptionQuestions, request: planRequest, baseSeed: runSeed });
     const folder = await this.folders.create(request.sourceFile, runStartedAt);
 
     const setCount = plans.length;
@@ -275,6 +291,7 @@ export class GenerationService {
       };
     });
 
+    const pinnedQuestions = questionsPinnedByPictures(paper);
     const unshufflableOptions: SkippedOptionShuffle[] = [];
     const layoutNotes: QuestionLayoutNote[] = [];
     for (const section of paper.sections) {
@@ -301,6 +318,7 @@ export class GenerationService {
       subjects,
       answerStyle: paper.answerKey.style,
       unshufflableOptions,
+      pinnedQuestions,
       // The advisor reads the options themselves, so it needs the same parser.
       advisories: this.advisor.advise(paper, optionParser),
       layoutNotes,

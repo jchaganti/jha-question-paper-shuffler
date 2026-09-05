@@ -123,12 +123,13 @@ function renderSummary(paper: PaperSummary): void {
 // --- dry run --------------------------------------------------------------------------
 
 /**
- * One of the dry run's three numbered findings.
+ * One of the dry run's numbered findings.
  *
- * All three are rendered the same way and shown every run, even when the count is zero, so
- * the report answers the same three questions in the same order every time: what could not
- * be read, what was read but is worth tidying, and what was read fine but may not mean the
- * same once its options move.
+ * All of them are rendered the same way and shown every run, even when the count is zero,
+ * so the report answers the same questions in the same order every time. Findings 1-3 are
+ * about a question's *options*: what could not be read, what was read but is worth tidying,
+ * and what was read fine but may not mean the same once its options move. Finding 4 is
+ * about a question's *position*, which is a separate axis and so a separate finding.
  */
 function renderFinding(number: number, heading: string, explanation: string): HTMLDetailsElement {
   const details = document.createElement('details');
@@ -273,6 +274,30 @@ function renderDryRun(report: DryRunReport): void {
       });
       details.append(addButton);
     }
+  }
+
+  // 4. About position rather than options: a picture anchored between two questions.
+  {
+    const details = renderFinding(
+      4,
+      `${report.questionsKeptByTool.length} picture(s) anchored between two questions, holding them in place`,
+      'A floating picture is drawn downwards from the paragraph it is anchored to, so a ' +
+        'picture anchored at the end of one question can be the artwork of the next. Those ' +
+        'questions keep their original positions and everything else shuffles around them.',
+    );
+
+    const list = document.createElement('ul');
+    list.className = 'notes-list';
+    for (const group of report.questionsKeptByTool) {
+      const item = document.createElement('li');
+      item.append(
+        element('strong', '', `Questions ${group.questionNumbers.join(' and ')} (${group.subject})`),
+        element('div', '', group.detail),
+        element('div', 'hint', `Fix: ${group.fix}`),
+      );
+      list.append(item);
+    }
+    if (report.questionsKeptByTool.length > 0) details.append(list);
   }
 }
 

@@ -34,7 +34,7 @@ points at it whenever it has to skip a question.
 
 **Dry run** writes nothing. It reports how many questions are free to move and how many
 will have their options shuffled, broken down per subject; any mistake in the exclusion
-lists, such as a question number this paper does not have; and then **three numbered
+lists, such as a question number this paper does not have; and then **four numbered
 findings**, always in this order and always shown, even when a count is zero:
 
 1. **Question(s) whose options cannot be shuffled with certainty** — these could not be
@@ -47,10 +47,16 @@ findings**, always in this order and always shown, even when a count is zero:
    position-dependent ("None of these", "Both (A) and (B)"), with a
    one-click **Add these N to "keep the option order"** button. Nothing is wrong with them;
    this one is your call, not the tool's.
+4. **Picture(s) anchored between two questions, holding them in place** — a floating picture
+   is drawn *downwards* from the paragraph it is anchored to, so a picture anchored at the
+   end of one question is often the artwork of the next. Those questions keep their original
+   positions and everything else shuffles around them; see
+   [Pictures anchored across a boundary](#pictures-anchored-across-a-boundary) below.
 
-The three answer three different questions — *what could not be read*, *what was read but
-is worth tidying*, *what was read fine but may not mean the same once its options move* —
-so they are never merged.
+The first three answer three different questions about a question's **options** — *what
+could not be read*, *what was read but is worth tidying*, *what was read fine but may not
+mean the same once its options move* — so they are never merged. The fourth is about a
+question's **position**, which is a separate axis.
 
 **Generate** writes the files, showing two progress bars: overall (`Set 2 of 4 · 1
 generated`) and the current set's step (`Shuffling options — 36% of this set`). The steps
@@ -79,7 +85,7 @@ the shuffler, the tests, the CLI — works without Electron.)
 npm test
 ```
 
-265 unit and end-to-end tests. They build question papers in memory (see
+275 unit and end-to-end tests. They build question papers in memory (see
 `tests/support/PaperFixture.ts`), so they run without any sample document.
 
 To review the UI without Electron and without a real paper:
@@ -105,6 +111,70 @@ npm run cli -- --file "C:\papers\MTP-2.docx" --dry-run --sets 4 --shuffle-questi
 ```bash
 npm run cli -- --file "C:\papers\MTP-2.docx" --sets 4 --shuffle-questions --shuffle-options --keep-question-positions 10,11,19,20 --keep-option-order 30,36,59 --seed march-batch
 ```
+
+---
+
+## Sharing the app with other people
+
+The people who type these papers should not need Node, npm or a terminal. Two Windows
+builds are set up; both bundle everything, so a recipient installs nothing else.
+
+### Portable zip — works everywhere
+
+```bash
+npm run portable
+```
+
+Writes `release/Question Paper Shuffler <version> (portable).zip` (about 110 MB). The
+recipient extracts the folder somewhere they can write to and double-clicks
+**Question Paper Shuffler.exe**. Nothing is installed, no administrator rights are needed,
+and nothing is written to the registry; to remove it they delete the folder. A
+**READ ME FIRST.txt** goes in with it saying exactly that.
+
+The zip is written with JSZip — already a dependency, because the tool reads `.docx`
+packages — so this build needs no archiver on the machine.
+
+### Installer — needs a working `7za.exe`
+
+```bash
+npm run dist
+```
+
+Writes `release/Question Paper Shuffler Setup <version>.exe`: an assisted installer that
+installs **per user** (so it never asks for an administrator password), adds Start Menu and
+desktop shortcuts, and uninstalls from Settings. Configured in `electron-builder.yml`.
+
+electron-builder compiles the installer's payload with a bundled `7za.exe`. Some corporate
+endpoint-protection agents quarantine that binary — the file is deleted the moment it runs
+and the build stops with `spawn EPERM`. (The NSIS compiler itself is fine; only the
+archiver is blocked, and the machine this was written on blocks it.) Either:
+
+- install the official signed 7-Zip, `winget install 7zip.7zip`, and point the build at it —
+
+  ```bash
+  ELECTRON_BUILDER_7ZIP_PATH="C:\Program Files\7-Zip\7z.exe" npm run dist
+  ```
+
+- or ask whoever administers the machine to allow
+  `%LOCALAPPDATA%\electron-builder\Cache\7zip@1.0.0\...\bin\7za.exe`.
+
+Until then, `npm run portable` produces a shareable build with no such dependency.
+
+### Both builds are unsigned
+
+There is no code-signing certificate, so the first people to run either build see
+**"Windows protected your PC"** from SmartScreen. They click *More info* → *Run anyway*.
+The warning is about the missing signature, not about anything the program does; it fades
+as more people run the same file. Buying a certificate (an EV one clears SmartScreen
+immediately) is the only way to remove it — `electron-builder.yml` has the `win` block
+ready for `certificateFile` / `certificatePassword` if one is ever bought.
+
+### The icon
+
+`build/icon.ico` is drawn by `npm run icon` (`scripts/make-icon.mjs`) — three fanned
+question papers with a different answer filled in on each, the same idea as the window
+watermark. It is generated rather than stored as an opaque binary so it can be edited and
+regenerated; `npm run pack` and `npm run dist` both refresh it first.
 
 ---
 
@@ -153,6 +223,24 @@ per set in the report; the one you re-enter is the run seed.
 A seed is not a secret or a password — anyone with the seed and the original paper can
 reproduce the sets. The report already contains the full answer mapping, so keep the whole
 `question-sets - …` folder as confidential as the paper itself.
+
+### Pictures anchored across a boundary
+
+A floating picture is placed from the paragraph it is anchored to and drawn *downwards*
+from there, as far as its height takes it. Word attaches the anchor to whichever paragraph
+was nearest when the picture was dropped — which, for artwork sitting at the top of a
+question, is very often the **last line of the previous question**.
+
+While the two questions stay next to each other the page looks right. Separate them and the
+picture travels with its anchor: one question loses its artwork and the other gains a
+diagram that means nothing beside it. Which question the picture belongs to is a fact about
+where Word *lays it out*, and cannot be read from the file — so instead of guessing, the
+tool keeps the pair in their original positions and shuffles everything else around them.
+The dry run names them, and names the picture to re-anchor to lift the restriction.
+
+In the sample corpus this holds 2 questions of 100 in *Alternating Current* (its question 42
+is drawn by a picture anchored in question 41) and 15 of 200 in *FST-1*; the other papers
+are unaffected.
 
 ### Shuffled, but worth correcting
 
@@ -482,12 +570,15 @@ clear error message when they do not hold.
    report. This happens for options laid out inside a table, options that continue onto
    another paragraph, an option whose whole answer is a floating picture or that has one in
    the middle of its words, questions where two lettered lists could equally be the options, and
-   labels whose opening bracket was inserted from a symbol font — that bracket prints as `(`
-   but holds no text, so where the option before it ends cannot be established. The missing
-   bracket is the whole signal there: only a label that reads as `A)` is suspect. A label
-   that reads as `(A)` has its bracket, so a symbol in front of it is the previous option's
-   *content* — an answer of `60Ω` or `15°` sitting last in its column, which after a shuffle
-   can land in front of any label — and the question shuffles normally.
+   labels whose opening bracket came from a *picture* font — that bracket prints as `(` but
+   holds no text, so where the option before it ends cannot be established. A bracket typed
+   with *Insert → Symbol* is not usually this case: the default font there is Symbol, whose
+   encoding is published, so the character is decoded, the label reads as `(A)`, and the
+   question shuffles normally. Only Wingdings and its relatives, which number drawings rather
+   than characters, leave nothing to read. And the missing bracket is the whole signal: a
+   label that reads as `(A)` has its bracket, so a symbol in front of it is the previous
+   option's *content* — an answer of `60Ω` or `15°` sitting last in its column, which after a
+   shuffle can land in front of any label.
    Where a fallback in assumption 6, 7 or 8 *did* make the options readable, the question is
    shuffled but still reported — see
    [Shuffled, but worth correcting](#shuffled-but-worth-correcting). Nothing the tool works
@@ -527,6 +618,7 @@ That is the answer for a specific paper. In general:
 | 1, 2 or 4 options per line, or one option per paragraph | Supported. |
 | Options with equations, superscripts, symbols, inline images | Supported - the run moves with its content. |
 | A floating picture anchored among the options (a diagram beside or between them) | Supported for both typed and Word-lettered labels - the answers move, the picture stays exactly where it is, and the question is **reported** so you can check it. |
+| A floating picture anchored in the **last paragraph** of a question (so it is drawn over the next one) | That question and the next keep their **positions**; everything else shuffles around them, and both are listed in the report with the anchor to move. |
 | A floating picture in the middle of one option's answer | Question keeps its option order and is listed in the report - the words would move and the picture would not. |
 | Options whose answers are **inline** pictures (`In line with text`) | Supported - the picture moves with its option like any other content. |
 | Options whose answers are **floating** pictures | Question keeps its option order and is listed in the report, naming the fix: set each option picture to *In line with text*. |
@@ -543,8 +635,9 @@ That is the answer for a specific paper. In general:
 | Two lists that could equally be the options | Question keeps its option order and is listed in the report. |
 | Options laid out inside a table, or a mix of one auto-lettered option and typed labels | Question keeps its option order and is listed in the report. |
 | 3 or 5 options, options continuing onto another paragraph, an option whose whole answer is a floating picture | Question keeps its option order and is listed in the report. |
-| A label whose opening bracket was put in with *Insert → Symbol* | Question keeps its option order and is listed in the report. |
-| An option whose *content* is a symbol (`60Ω`, `15°`), sitting right before the next label | Supported - the label has its own bracket, so the symbol is content and moves with it. |
+| A label whose opening bracket was put in with *Insert → Symbol*, in the Symbol font | Supported — Symbol's encoding is published, so the bracket is read and the label is `(A)` like any other. |
+| A label whose opening bracket came from a picture font (Wingdings, Webdings) | Question keeps its option order and is listed in the report, naming the label to retype. |
+| An option whose *content* is a symbol (`60Ω`, `15°`, `θ`), sitting right before the next label | Supported - the label has its own bracket, so the symbol is content and moves with it. |
 | Answer key numbers written `1.` or `1)` | Supported. |
 | Answer key answers written `A`, `(A)`, `a`, `1`, `2.`, `iii)` or `(IV)` | Supported — the key's own style is deduced, and both the rewritten key and the generation report use it. |
 | Question numbers typed by hand instead of Word numbering | **Hard error** naming the lists it did find. |
@@ -589,12 +682,16 @@ src/core/parse/            numbering, paper structure, answer key
 src/core/options/          the two option layouts, atoms, applying a permutation
 src/core/shuffle/          seeded RNG and the pure shuffle planner
 src/core/generate/         set builder, page flow, output folder, report, orchestration
+src/core/report/           the PDF writer and the report layout
 src/core/verify/           post-generation verification
 src/main/                  Electron main process + preload bridge
 src/renderer/              UI (HTML/CSS/TS, no framework)
 src/cli/                   headless entry point
 tests/                     unit + end-to-end tests with an in-memory paper fixture
-scripts/                   build helpers, Electron repair, diagnostics
+scripts/                   build helpers, the icon, the portable zip, diagnostics
+build/                     icon.ico, the only build resource electron-builder needs
+electron-builder.yml       how the Windows installer is put together
+release/                   generated builds (git-ignored)
 ```
 
 Diagnostics used while developing, handy when a new paper misbehaves:

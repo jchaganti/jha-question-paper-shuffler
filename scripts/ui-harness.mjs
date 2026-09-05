@@ -43,6 +43,20 @@ const paper = {
     skip(50, 'CHEMISTRY', 'unexpected-label-sequence', 'Expected labels A,B,C,D but found "ABD".'),
     skip(103, 'BIOLOGY', 'options-inside-table', 'Option labels were found inside a table.'),
   ],
+  pinnedQuestions: [
+    {
+      questionNumbers: [41, 42],
+      subject: 'PHYSICS',
+      detail:
+        'A floating picture is anchored in the last paragraph of question 41, so it is drawn over ' +
+        'whatever follows it - question 42. Moving either question away from the other would take ' +
+        'the picture with it, leaving one question without its artwork.',
+      fix:
+        'In Word, click the picture at the end of question 41 and drag its anchor marker into the ' +
+        'question the picture illustrates - or set its Layout Options to "In line with text", which ' +
+        'anchors it exactly where it sits.',
+    },
+  ],
   advisories: [
     advisory(49, 'CHEMISTRY', 'assertion-reason', 'Assertion-Reason / Statement-I-II style question.'),
     advisory(59, 'CHEMISTRY', 'references-other-option', 'Option text refers to another option: "Both (A) and (B)"'),
@@ -93,7 +107,10 @@ window.shuffler = {
     await sleep(250);
     const kept = new Set(request.optionExclusions);
     const unshufflable = new Set(PAPER.unshufflableOptions.map((s) => s.questionNumber));
-    const pinned = new Set(request.questionExclusions);
+    const pinned = new Set([
+      ...request.questionExclusions,
+      ...PAPER.pinnedQuestions.flatMap((group) => group.questionNumbers),
+    ]);
     const subjects = PAPER.subjects.map((s) => {
       const numbers = Array.from({ length: s.questionCount }, (_u, i) => s.firstQuestionNumber + i);
       return {
@@ -117,6 +134,7 @@ window.shuffler = {
         optionsToShuffle: subjects.reduce((a, s) => a + s.optionsShuffled, 0),
         optionsKeptByUser: [...kept].sort((a, b) => a - b),
         optionsKeptByTool: PAPER.unshufflableOptions,
+        questionsKeptByTool: request.shuffleQuestions ? PAPER.pinnedQuestions : [],
         suggestedForExclusion: PAPER.advisories.filter((a) => !kept.has(a.questionNumber)),
         warnings: request.questionExclusions.includes(999)
           ? ['This paper has no question 999, so those entries will have no effect.']

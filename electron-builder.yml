@@ -1,0 +1,65 @@
+# How the shareable Windows installer is built.
+#
+#   npm run dist        # build, draw the icon, package  ->  release/
+#
+# The result is one file, `release/Question Paper Shuffler Setup <version>.exe`, that the
+# people who type these papers can run themselves: it installs **per user**, so it never
+# asks for an administrator password, and it uninstalls from Settings like any other app.
+#
+# Nothing here is signed. Windows SmartScreen will therefore warn the first few people who
+# run it - see the "Sharing the installer" section of README.md for what to tell them.
+
+appId: com.jha.question-paper-shuffler
+productName: Question Paper Shuffler
+copyright: © Jha Classes
+
+directories:
+  output: release
+  buildResources: build
+
+# The default NSIS toolset is a `.7z`, which electron-builder unpacks by running a bundled
+# `7za.exe`. Windows Defender quarantines that binary on this machine - it deletes it
+# mid-build, and the build dies with `spawn EPERM`. The 1.2.1 bundle ships as a `.tar.gz`
+# instead, which is unpacked in-process by Node, so no extra executable has to run.
+#
+# If a future machine cannot download it either, extract the bundle by hand and point
+# `ELECTRON_BUILDER_NSIS_DIR` at the folder; see "Building the installer" in README.md.
+toolsets:
+  nsis: 1.2.1
+
+# Only what the app actually runs. The CLI, the source maps and the UI harness are
+# development tools, and shipping them would put a second copy of the engine - and a
+# quarter of the download - inside an installer nobody debugs from.
+files:
+  - dist/main/**/*
+  - dist/core/**/*
+  - dist/shared/**/*
+  - dist/web/**/*
+  - package.json
+  - '!**/*.map'
+  - '!dist/web/renderer/harness.html'
+
+# jszip and @xmldom/xmldom are the only runtime dependencies; everything else in
+# node_modules is a build tool and is left out automatically.
+npmRebuild: false
+
+win:
+  target: nsis
+  icon: build/icon.ico
+  # Shown in the file's Properties and by SmartScreen, so it says what the file is.
+  legalTrademarks: ''
+
+nsis:
+  # An assisted installer rather than a silent one-click: whoever runs it sees what is
+  # about to happen and where it will go, which is the right default for a file that
+  # arrived by email.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Question Paper Shuffler
+  uninstallDisplayName: Question Paper Shuffler
+  # Leaves generated sets and settings alone; only the app itself is removed.
+  deleteAppDataOnUninstall: false
+  artifactName: ${productName} Setup ${version}.${ext}

@@ -60,8 +60,11 @@ exact box/label to fix, an entry in the in-app **best practices** list
 ```bash
 npm run build        # tsc main (CommonJS) + renderer (ESM) + copy static assets
 npm start            # build, then launch Electron
-npx vitest run       # 265 tests, 20 files
+npx vitest run       # 288 tests, 22 files
+npm run portable     # release/Question Paper Shuffler <v> (portable).zip - shareable, no archiver needed
+npm run dist         # release/... Setup <v>.exe - needs a 7za the machine will run, see item 26
 npm run cli -- --file "paper.docx" --shuffle-questions --shuffle-options --dry-run
+npm run regress      # every paper in C:\ps\q-paper; add -- --generate to also verify sets
 node scripts/ui-harness.mjs   # dist/web/renderer/harness.html — real UI, stubbed backend
 ```
 
@@ -97,6 +100,7 @@ SetVerifier        re-open the written file and prove four properties
 | Path | Responsibility |
 | --- | --- |
 | `core/docx/` | zip + XML DOM helpers (`xml.ts` has `NS`, `visibleText`, `firstChild`, …) |
+| `core/docx/SymbolFont.ts` | Adobe's Symbol encoding, so a `w:sym` reads as the character it prints |
 | `core/parse/PaperParser.ts` | the structural reader; throws `PaperParseError` with user-facing text |
 | `core/parse/AnswerKeyTable.ts` | finds the key grid, reads/writes letters, reports spoilt boxes |
 | `core/parse/NumberingIndex.ts` | Word numbering definitions |
@@ -107,6 +111,7 @@ SetVerifier        re-open the written file and prove four properties
 | `core/generate/SetBuilder.ts` | builds one set end to end |
 | `core/generate/PageFlow.ts` | `keepNext`/`keepLines`/`cantSplit`/`pageBreakBefore` |
 | `core/generate/Signatures.ts` | question fingerprint, invariant under option shuffling |
+| `core/parse/BoundaryPictures.ts` | floats anchored across a question boundary, which pin both questions |
 | `core/verify/SetVerifier.ts` | re-parses the written file; the safety net |
 | `core/report/Pdf.ts` | the minimal PDF writer - fonts, text, rules, xref |
 | `core/report/ReportPdf.ts` | typesets a `ReportDocument` onto pages |
@@ -118,8 +123,10 @@ SetVerifier        re-open the written file and prove four properties
 ### Key data structures
 
 - **`Atom`** — one inline element wrapped in its own run carrying cloned `rPr`. Fields:
-  `node`, `paragraphIndex`, `text`, `blank`, `floatingGraphic`, `symbol`. A `w:sym` has
-  `text: ''` but `blank: false`, so it is never trimmed away as whitespace.
+  `node`, `paragraphIndex`, `text`, `blank`, `floatingGraphic`, `unreadableSymbol`. A
+  `w:sym` in the Symbol font contributes its decoded character to `text` (item 27); one in a
+  picture font contributes `''` but is still `blank: false`, so it is never trimmed away as
+  whitespace.
 - **`OptionSlot`** — `labelAtoms` / `leadAtoms` / `coreAtoms` / `padAtoms`. **Only
   `coreAtoms` move.** Label, the tabs after it, and the trailing padding belong to the
   *position*, which is what keeps columns aligned and separators in place.
@@ -501,6 +508,114 @@ Commits, oldest first:
 
     265 tests, 20 files.
 
+25. **A picture anchored across a question boundary pins both questions.** Reported as
+    "images not properly placed" for Alternating Current Q42.
+
+    The question's XML in the generated set is byte-identical to the source apart from the
+    page-flow flags, and Word reports the same shapes at the same offsets - yet the artwork
+    was gone. Word's object model gave the answer: one of the graphs, `Group 29`, is
+    anchored at character 11652, which is **question 41's last paragraph**, and drawn 20pt
+    below it - straight over question 42's `(A)/(B)` row. A float is drawn *downwards* from
+    its anchor, and Word attaches that anchor to whichever paragraph was nearest when the
+    picture was dropped. Move the two questions apart and the picture leaves with 41.
+
+    Which question such a picture belongs to is a fact about Word's *layout*, not about the
+    file, so it is not guessed. `questionsPinnedByPictures` (`core/parse/BoundaryPictures.ts`)
+    finds a floating graphic in a block's **last** paragraph - the only place one can be
+    drawn over the *next* question - and holds that question and its successor at their
+    original positions. Everything else shuffles around them. A picture anchored anywhere
+    earlier is drawn over its own question's paragraphs, which travel with it, so it is
+    ignored.
+
+    Wired in as ordinary question exclusions, so the planner needed no new concept. The
+    numbers are kept out of `optionsKeptByUser` and out of the "this paper has no question
+    N" warning - a number the *tool* pinned must never be reported back as the user's.
+
+    **Dry-run finding 4** was added for it. Findings 1-3 are about a question's *options*;
+    this one is about its *position*, which is a separate axis and so a separate finding.
+
+    **Corpus cost**: 2 questions of 100 (Alternating Current), 15 of 200 (FST-1), 2 of 180
+    (Group A); every other paper unaffected. All verifications still PASS.
+
+    **How it was proved**, and how to re-check: Word COM exports the page to PDF
+    (`ExportAsFixedFormat`), and a scratch script inflates the page content stream and counts
+    the drawing operators in the band the artwork occupies. Before the fix that band held
+    `m:7 c:11 re:8 l:5`; after it, `m:13 c:60 re:13 l:9` - identical to the source. Counting
+    operators beats looking at a thumbnail; the Bézier count alone is unreliable because the
+    page watermark falls in different bands depending on where the question sits.
+
+    288 tests, 22 files.
+
+26. **Windows builds, so the app can be handed to the people who type the papers.**
+
+    - `npm run portable` → `release/Question Paper Shuffler <version> (portable).zip`
+      (~110 MB). Extract anywhere, run the exe; nothing installed, no admin rights, no
+      registry. A `READ ME FIRST.txt` goes in the zip. Zipped with **JSZip**, already a
+      dependency, so this build needs no archiver on the machine - which matters, see below.
+    - `npm run dist` → `release/Question Paper Shuffler Setup <version>.exe`, an assisted
+      per-user NSIS installer with shortcuts and an uninstall entry. `electron-builder.yml`.
+    - `npm run icon` draws `build/icon.ico` (`scripts/make-icon.mjs`): three fanned papers,
+      the watermark's idea, rendered by writing pixels and deflating a PNG by hand - the
+      same "no new dependency for a small job" call as the PDF writer. 7 sizes, 16-256 px.
+
+    **The installer cannot be built on this machine.** electron-builder compresses the
+    installer payload with a bundled `7za.exe`, and the endpoint-protection agent here
+    quarantines it - the file is *deleted* as it runs and the build dies with `spawn EPERM`.
+    Established by elimination: `electron.exe` and NSIS's own `makensis.exe` both run fine
+    from the same directories, unsigned, so it is that binary and not the path or the
+    signature. Windows Defender's service is not even running (`Get-MpPreference` fails with
+    0x800106ba), so it is a third-party agent.
+
+    Two things came out of chasing it, both kept:
+    - `toolsets: { nsis: 1.2.1 }` in `electron-builder.yml`. The default NSIS toolset is a
+      `.7z` and needed 7za merely to *unpack*; the 1.2.1 bundle is a `.tar.gz`, unpacked
+      in-process by Node. That removed one of the two 7za uses.
+    - The other use - creating `app.7z` - has no way around it: on Windows
+      `targets/archive.ts` always goes through 7za, `useZip` included, and the MSI target
+      needs 7za to unpack WiX. So the fix is to give it a 7za that is allowed:
+      `ELECTRON_BUILDER_7ZIP_PATH="C:\Program Files\7-Zip\7z.exe" npm run dist` after
+      `winget install 7zip.7zip`, or an exclusion from whoever administers the machine.
+
+    **Not done, deliberately**: pre-extracting toolsets into electron-builder's cache and
+    hand-writing its `.state` files. It would have worked today and broken on the next
+    upgrade - the standing rule's "is this reading a standard form, or guessing past an
+    ambiguity?" applies to build tooling too.
+
+    Neither build is signed, so SmartScreen warns on first run. README says what to tell
+    recipients. Both builds were smoke-tested: packaged app launches with the right window
+    title and icon, and the app runs from a freshly extracted copy of the zip.
+
+27. **A `w:sym` in the Symbol font is now read, not treated as unreadable ink.**
+    `src/core/docx/SymbolFont.ts`.
+
+    The refusal in item 4/7 rested on a claim that turned out to be false: *"that character
+    carries no readable text."* `<w:sym w:font="Symbol" w:char="F028"/>` states its code in
+    the font's own encoding, and Symbol's encoding is published - the same Adobe
+    specification that gives `Pdf.ts` its widths. 0x28 is `parenleft`. Reading it is
+    deduction, not a guess, so the standing rule never applied to this case.
+
+    `symbolCharacter(font, char)` decodes Symbol and nothing else; `symbolTextOf` in
+    `xml.ts` is used by both `visibleText` and `Atoms.atomText`, so every reading of the
+    document sees the character. `Atom.symbol` became `Atom.unreadableSymbol` - true only
+    for a `w:sym` that decoded to nothing - and the refusal now fires only for those. The
+    fix message names picture fonts instead of Insert > Symbol.
+
+    **Do not use the naive low-byte mapping.** `F071` is *not* `q`: Symbol 0x71 is θ. Half
+    the codes coincide with ASCII and half do not, and a lower-case letter invented out of a
+    physics variable would fabricate an option label. The table is the real encoding, written
+    as the runs of consecutive codes that have a character to read; the gaps (0x60,
+    0xBD-0xBE, 0xE6-0xF0, 0xF3+) are glyph *pieces* for drawing tall brackets, which are ink
+    rather than characters and still read as nothing.
+
+    Corpus effect: MTP-2-XI-2023 **158 → 191** shuffled, all 33 `label-bracket-is-a-symbol`
+    refusals gone; every other paper unchanged to the question, all twelve still verify.
+    Option text also stopped losing characters everywhere - `at an angle θ` used to read
+    `at an angle `.
+
+    `scripts/regress.mjs` was written for this and kept: it copies the corpus to a scratch
+    directory, dry-runs each paper and prints shuffled counts and refusal reasons, with
+    `--generate` to write two sets each and verify them.
+
 ## 5 · Decisions worth not relitigating
 
 | Decision | Why |
@@ -510,6 +625,8 @@ Commits, oldest first:
 | `splitLeadCorePad` kept | Justified by measurement, not taste: without it four clean papers lost characters |
 | Loose-signature verifier fallback **reverted** | It made a defective document report PASSED — the exact failure mode verification exists to prevent |
 | Symbol check keyed on the *missing bracket*, not on the symbol | The missing bracket is the actual signal; keying on the symbol punishes legitimate `60Ω` options |
+| Symbol-font characters are decoded; picture fonts are not | Symbol has a published encoding, so reading it is deduction. Wingdings numbers drawings, so there is genuinely nothing to read and the refusal stands |
+| The Symbol table is the real encoding, never the low byte | `F071` is θ, not `q`. A naive mapping would invent a lower-case option label out of a physics variable |
 | Option schemes tried letters → digits → roman | Order of decreasing certainty that a run of labels is the *options*; an `(i)…(iv)` item list must never outrank real answers |
 | A key table must use one answer scheme throughout | It is what separates an answer key from any other grid of numbers, now that digits are valid answers |
 | Slots stay named A–D internally whatever the page writes | One canonical vocabulary for permutations and the key; labels are never moved, so the page keeps its own tokens regardless |
@@ -530,6 +647,10 @@ Commits, oldest first:
 | `ReportDocument` between the writer and the page | What the report says is testable without a PDF, and the typesetting without a generation run |
 | Measuring and drawing share one WinAnsi pass | `→` prints as `->`; measuring the original string would reserve two characters too few and overrun the column |
 | Only weighted (prose) columns give up width | A subject column that wraps reads worse than a taller reason column, and only prose loses nothing by taking another line |
+| A float in a block's last paragraph pins that question and the next | It is drawn downwards over the following question, and which question it belongs to is a layout fact Word alone has; holding the pair costs 19 questions in the whole corpus |
+| Dry-run finding 4 kept separate from 1-3 | Findings 1-3 are about a question's options; this one is about its position |
+| The portable zip is built with JSZip, not an archiver | It is already a dependency, and the machine's endpoint agent will not run `7za.exe` |
+| electron-builder's toolset cache is left alone | Pre-extracting and hand-writing its `.state` files would work today and break on the next upgrade |
 | One palette, written into `:root` | The picker was a setting nobody needed to change; removing it also removed the startup flash it caused |
 | Watermark on `body::before`, not `body` | Lets the theme control its opacity and tint independently of the wash |
 
@@ -537,7 +658,7 @@ Commits, oldest first:
 
 ## 6 · Current state
 
-- **265 tests pass**, 20 files. `npx vitest run`.
+- **288 tests pass**, 22 files. `npx vitest run`.
 - Renderer type-checks; UI harness builds; Electron launches clean.
 
 ### Paper corpus (`C:\ps\q-paper`)
@@ -550,7 +671,7 @@ Commits, oldest first:
 | MTP-2-PCB-XI-2027 Group B | 180 | 174 | Works |
 | MTP-2-PCB-XI-2027 Group C | 180 | 172 | Works |
 | MTP-2-PCB-XI-2027 Group D | 180 | 175 | Works |
-| MTP-2-XI-2023 | 200 | 158 | Works (symbol-bracket questions skipped) |
+| MTP-2-XI-2023 | 200 | 191 | Works — the 33 Symbol-bracket labels are read now (item 27) |
 | Nano MTP 2 Physics | 12 | 11 | Works |
 | Nano MTP Chemistry-1 | 12 | 12 | Works |
 | Alternating Current XII-2024 | 100 | 97 | Works — the `57,` box and Q75’s space-run separator have since been retyped in Word |
@@ -628,19 +749,21 @@ deduced, and the paper works.)
 
 ### How to re-run the corpus
 
-There is no committed script for this; it was done inline. Copy each paper to a temp
-directory first — the CLI writes a `question-sets - date-time` folder next to the source file, and you must
-not litter the user's folder.
+`scripts/regress.mjs` does it. It copies every paper to a scratch directory first — the CLI
+writes its output folder next to the source file, and the corpus folder must not be
+littered — then prints one row per paper: questions, options shuffled, questions pinned by a
+picture, and a breakdown of the refusal reasons.
 
 ```bash
-for f in "C:/ps/q-paper/"*.docx; do
-  b=$(basename "$f" .docx); cp "$f" "./$b.docx"
-  node dist/cli/cli.js --file "./$b.docx" --shuffle-questions --shuffle-options \
-    --sets 2 --seed regress 2>&1 | grep -E "verification|^Error:"
-done
+npm run build:main && node scripts/regress.mjs
 ```
 
-Consider promoting this to `scripts/regress.mjs` — it has been retyped several times.
+Add `--generate` to write two sets per paper and verify them (slower, and the only way to
+catch a shuffle that destroys the boundary it was read from). `--dir` points it at another
+folder, `--seed` changes the permutations.
+
+Compare the *options shuffled* column against the table in §6. A silent drop means a new
+false-positive refusal; a silent rise means a check stopped firing.
 
 ---
 
@@ -651,8 +774,9 @@ Consider promoting this to `scripts/regress.mjs` — it has been retyped several
 - `OptionSet.signatures` is a getter over **parse-time** atoms. After `apply`, run merging
   can empty an atom's node, so signatures read *after* apply are misleading. Assert on the
   document (paragraph text, or text with symbols rendered), not on the model.
-- A `w:sym` contributes `''` to text but is **not** blank. Any new whitespace logic must
-  keep it inside `coreAtoms` or symbols get left behind.
+- A `w:sym` from a picture font contributes `''` to text but is **not** blank. Any new
+  whitespace logic must keep it inside `coreAtoms` or symbols get left behind.
+- Symbol's codes are not ASCII. `F071` is θ, not `q`. Never map a `w:char` by its low byte.
 - The relaxed label pass reads a boundary from surrounding punctuation. That boundary is
   not stable across a shuffle — this is exactly open issue 1.
 - Never write generated sets into `C:\ps\q-paper`; copy the paper out first.

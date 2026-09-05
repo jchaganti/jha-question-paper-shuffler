@@ -9,6 +9,7 @@ import {
   isElement,
   ownerDocumentOf,
   preserveSpace,
+  symbolTextOf,
   visibleText,
 } from '../docx/xml';
 
@@ -33,11 +34,12 @@ export interface Atom {
   /** True when the atom holds a floating (anchored) image, which must not be moved. */
   readonly floatingGraphic: boolean;
   /**
-   * True when the atom is a `w:sym` - a character from a symbol font, inserted with
-   * Insert > Symbol. It carries ink but no readable text, so it cannot be told apart
-   * from its neighbours by reading the paragraph.
+   * True when the atom is a `w:sym` whose font this tool cannot read - a picture font such
+   * as Wingdings. It carries ink but no readable text, so it cannot be told apart from its
+   * neighbours by reading the paragraph. A `w:sym` in the Symbol font is *not* flagged:
+   * its character is decoded and contributes to `text` like any other. See `SymbolFont.ts`.
    */
-  readonly symbol: boolean;
+  readonly unreadableSymbol: boolean;
 }
 
 export interface ParagraphAtoms {
@@ -95,7 +97,7 @@ function makeAtom(node: Element, source: Element, paragraphIndex: number): Atom 
     text,
     blank: !ink,
     floatingGraphic,
-    symbol: source.namespaceURI === NS.w && source.localName === 'sym',
+    unreadableSymbol: source.namespaceURI === NS.w && source.localName === 'sym' && text === '',
   };
 }
 
@@ -121,7 +123,7 @@ export function atomText(el: Element): string {
       case 'noBreakHyphen':
         return '-';
       case 'sym':
-        return '';
+        return symbolTextOf(el);
       default:
         break;
     }
@@ -145,7 +147,7 @@ function hasInk(el: Element): boolean {
  * them would leave the picture behind. Questions with such options are reported and left
  * untouched. Inline drawings and OLE equations, by contrast, travel with their run.
  */
-function hasFloatingGraphic(el: Element): boolean {
+export function hasFloatingGraphic(el: Element): boolean {
   for (const drawing of withSelf(el, NS.w, 'drawing')) {
     if (descendants(drawing, NS.wp, 'anchor').length > 0) return true;
   }
@@ -309,6 +311,6 @@ function sliceTextAtom(atom: Atom, from: number, to: number): Atom {
     text: slice,
     blank: slice.trim() === '',
     floatingGraphic: false,
-    symbol: false,
+    unreadableSymbol: false,
   };
 }

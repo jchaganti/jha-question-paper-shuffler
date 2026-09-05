@@ -80,7 +80,25 @@
       "Bash(grep -rn \"→\\\\|\\\\\\\\\\\\\\\\u2192\" --include=*.ts src/)",
       "Bash(awk '{print $6, $7}')",
       "Bash(sed -i 's/^242 unit and end-to-end tests\\\\./265 unit and end-to-end tests./' README.md)",
-      "Bash(sed -i 's|npx vitest run       # 242 tests, 19 files|npx vitest run       # 265 tests, 20 files|; s|^- \\\\*\\\\*242 tests pass\\\\*\\\\*, 19 files\\\\.|- **265 tests pass**, 20 files.|' handoff.md)"
+      "Bash(sed -i 's|npx vitest run       # 242 tests, 19 files|npx vitest run       # 265 tests, 20 files|; s|^- \\\\*\\\\*242 tests pass\\\\*\\\\*, 19 files\\\\.|- **265 tests pass**, 20 files.|' handoff.md)",
+      "Bash(node scripts/diag-labels.cjs \"C:/ps/q-paper/Alternating Current-XII-2024-3823-08.12.2023-\\(XII-23-3347-19.01.23_corr_Sarvesh sir_26-09-2023\\).docx\" 42,12,26)",
+      "Bash(node \"C:/Users/JCHAGA~1/AppData/Local/Temp/claude/C--ps-jha-question-paper-shuffler/6008bcec-0d93-4729-88fe-a19be5423dda/scratchpad/diag-anchor.cjs\" \"C:/ps/q-paper/Alternating Current-XII-2024-3823-08.12.2023-\\(XII-23-3347-19.01.23_corr_Sarvesh sir_26-09-2023\\).docx\" 42)",
+      "PowerShell(try { $w = New-Object -ComObject Word.Application; Write-Output \"Word available: $\\($w.Version\\)\"; $w.Quit\\(\\) } catch { Write-Output \"no Word: $\\($_.Exception.Message\\)\" })",
+      "Bash(node \"C:/Users/JCHAGA~1/AppData/Local/Temp/claude/C--ps-jha-question-paper-shuffler/6008bcec-0d93-4729-88fe-a19be5423dda/scratchpad/straddle.cjs\")",
+      "Bash(npm view *)",
+      "Bash(node -e \"console.log\\('electron-builder', require\\('electron-builder/package.json'\\).version\\)\")",
+      "Bash(node scripts/make-icon.mjs)",
+      "Bash(./node_modules/7zip-bin/win/x64/7za.exe)",
+      "Read(//c/Users/jchaganti/AppData/Local/electron-builder/Cache/**)",
+      "Read(//c/Users/jchaganti/AppData/Local/electron-builder/Cache/nsis-3.0.4.1/**)",
+      "Bash(rm -rf .tmp7z)",
+      "Bash(npx electron-builder *)",
+      "Bash(rm -f release/Question-Paper-Shuffler-portable.zip release/exe-icon.png)",
+      "Bash(node dist/cli/cli.js --file \"C:/ps/q-paper/MTP-2-XI-2023 -3173-12.09.2022.docx\" --shuffle-options --dry-run)",
+      "Bash(grep -i \"quote\\\\|\\\\`\\\\\"\")",
+      "Bash(grep -n \"A \\\\`w:sym\\\\` contributes\" -B 2 -A 3 handoff.md)",
+      "Bash(sed -n '/### How to re-run the corpus/,/^---$/p' handoff.md)",
+      "Bash(node scripts/ui-harness.mjs --check)"
     ],
     "defaultMode": "bypassPermissions"
   }

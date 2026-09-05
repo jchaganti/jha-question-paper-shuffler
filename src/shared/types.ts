@@ -140,6 +140,20 @@ export interface SubjectSummary {
   readonly questionCount: number;
 }
 
+/**
+ * Questions the tool keeps at their original positions, whatever the user asked, because
+ * moving them apart would take a floating picture away from the question it illustrates.
+ *
+ * One of these per picture, naming every question it holds in place - usually a pair.
+ */
+export interface PinnedQuestionGroup {
+  readonly questionNumbers: readonly number[];
+  readonly subject: string;
+  readonly detail: string;
+  /** What to change in the Word document to lift the restriction. */
+  readonly fix: string;
+}
+
 /** What the parser understood about the source paper. Shown in the UI before generating. */
 export interface PaperSummary {
   readonly sourceFile: string;
@@ -152,6 +166,8 @@ export interface PaperSummary {
   readonly answerStyle: AnswerStyle;
   /** Questions whose options cannot be shuffled safely, whatever the user asks. */
   readonly unshufflableOptions: readonly SkippedOptionShuffle[];
+  /** Questions that cannot be moved safely, whatever the user asks. */
+  readonly pinnedQuestions: readonly PinnedQuestionGroup[];
   /** Questions worth adding to the "options not shuffled" exclusion list. */
   readonly advisories: readonly OptionAdvisory[];
   /**
@@ -191,6 +207,8 @@ export interface DryRunReport {
   readonly optionsKeptByUser: readonly number[];
   /** Questions whose options stay put because they cannot be parsed with certainty. */
   readonly optionsKeptByTool: readonly SkippedOptionShuffle[];
+  /** Questions whose position stays put because a picture is anchored across the boundary. */
+  readonly questionsKeptByTool: readonly PinnedQuestionGroup[];
   /** Position-dependent options not yet in the exclusion list - worth adding. */
   readonly suggestedForExclusion: readonly OptionAdvisory[];
   /** Anything the user should read before generating (bad exclusion numbers, etc.). */

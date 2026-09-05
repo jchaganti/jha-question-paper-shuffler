@@ -1,5 +1,6 @@
 import { DOMParser, XMLSerializer } from '@xmldom/xmldom';
 import type { Document, Element, Node } from './dom';
+import { symbolCharacter } from './SymbolFont';
 
 /** OOXML namespaces used by this application. */
 export const NS = {
@@ -98,7 +99,20 @@ export function wVal(el: Element): string | undefined {
   return value === null || value === '' ? undefined : value;
 }
 
-/** Visible text of a paragraph/run subtree: `w:t` text plus tabs and line breaks. */
+/**
+ * What a `w:sym` prints, or `''` when its font is one this tool cannot read.
+ *
+ * A character inserted with Insert > Symbol carries no `w:t`, so it is invisible to any
+ * reading that looks only at text - which is how an option label typed as `(A)` came to
+ * read as `A)`. See `SymbolFont.ts`.
+ */
+export function symbolTextOf(el: Element): string {
+  const font = el.getAttributeNS(NS.w, 'font') ?? '';
+  const char = el.getAttributeNS(NS.w, 'char') ?? '';
+  return symbolCharacter(font, char) ?? '';
+}
+
+/** Visible text of a paragraph/run subtree: `w:t` text, symbols, tabs and line breaks. */
 export function visibleText(root: Element): string {
   let out = '';
   const walk = (el: Element): void => {
@@ -119,6 +133,9 @@ export function visibleText(root: Element): string {
             continue;
           case 'noBreakHyphen':
             out += '-';
+            continue;
+          case 'sym':
+            out += symbolTextOf(node);
             continue;
           default:
             break;

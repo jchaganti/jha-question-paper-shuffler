@@ -127,6 +127,18 @@ async function main(): Promise<void> {
     if (report.suggestedForExclusion.length > 0) {
       console.log(`\n     --keep-option-order ${report.suggestedForExclusion.map((i) => i.questionNumber).join(',')}`);
     }
+
+    // A fourth finding, about question *position* rather than options: these questions are
+    // held where they are so that a picture anchored across their boundary stays with the
+    // question it illustrates.
+    console.log(
+      `\n4. ${report.questionsKeptByTool.length} picture(s) anchored between two questions, holding them in place.`,
+    );
+    console.log('   These questions keep their original positions; everything else shuffles around them.');
+    for (const group of report.questionsKeptByTool) {
+      console.log(`     Q${group.questionNumbers.join(', Q')} [${group.subject}] ${group.detail}`);
+      console.log(`       fix: ${group.fix}`);
+    }
     console.log(
       `\nOptions already kept because you asked (${report.optionsKeptByUser.length}): ` +
         `${report.optionsKeptByUser.join(', ') || '-'}`,

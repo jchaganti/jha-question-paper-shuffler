@@ -4,8 +4,10 @@
  *
  *  1. Whitespace at the edges of an option belongs to the *slot*, not to the content, so
  *     the space that separates one option from the next label never travels away.
- *  2. When a label's opening bracket is a symbol-font character, where the previous option
- *     ends cannot be established, so the question is refused rather than guessed at.
+ *  2. A label's opening bracket typed with Insert > Symbol is read from the font's own
+ *     encoding, so it belongs to the label. Only a bracket from a picture font, which says
+ *     nothing about what it prints, leaves the previous option's end unknown - and that
+ *     question is refused rather than guessed at.
  */
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
@@ -56,13 +58,13 @@ const optionText = (block: QuestionBlock): string =>
     .replace(/\t/g, '→');
 
 /**
- * Option text with each symbol-font character shown as the glyph it prints. Symbols carry
- * no text of their own, so plain text alone cannot show whether one stayed with its
+ * Option text with each `w:sym` shown as `glyph`. A symbol has no text of its own in the
+ * document, so reading the paragraph normally cannot show whether one stayed with its
  * number or was left behind in the old column.
  */
-function optionTextWithSymbols(block: QuestionBlock): string {
+function optionTextWithSymbols(block: QuestionBlock, glyph = 'Ω'): string {
   const render = (node: Element): string => {
-    if (node.namespaceURI === NS.w && node.localName === 'sym') return 'Ω';
+    if (node.namespaceURI === NS.w && node.localName === 'sym') return glyph;
     if (node.namespaceURI === NS.w && node.localName === 't') return node.textContent ?? '';
     if (node.namespaceURI === NS.w && node.localName === 'tab') return '→';
     return childElements(node).map(render).join('');
@@ -136,12 +138,70 @@ describe('the separator between an option and the next label', () => {
   });
 });
 
-describe('a label whose bracket is a symbol-font character', () => {
+describe('a label whose bracket was typed in the Symbol font', () => {
   const paper = (): FixtureSection[] =>
     paperWith({
       stem: 'Which of these is correct?',
       optionParagraphs: [],
       rawOptionParagraph: symbolBracketOptionParagraph(['first', 'second', 'third', 'none of these']),
+      answer: 'D',
+    });
+
+  it('is read: Symbol 0x28 is a left parenthesis, so the label is "(A)"', async () => {
+    const { parsed } = await firstQuestion(paper());
+
+    if (!parsed.ok) throw new Error(`expected the options to parse, got ${parsed.reason}`);
+    // No signature mentions the `w:sym`: the bracket went to the label, not to an option.
+    expect(parsed.options.signatures).toEqual(['first|', 'second|', 'third|', 'none of these|']);
+  });
+
+  it('leaves the bracket where it is when the contents move', async () => {
+    const { block, parsed } = await firstQuestion(paper());
+    if (!parsed.ok) throw new Error('expected the options to parse');
+
+    parsed.options.apply([3, 2, 1, 0]);
+
+    // The bracket belongs to the label, not to the option before it, so all four stay put.
+    expect(optionTextWithSymbols(block, '(')).toBe(
+      '(A) →none of these→(B) →third→(C) →second→(D) →first→',
+    );
+  });
+
+  it('shuffles like any other question, and still reads back', async () => {
+    const workingDir = await fs.mkdtemp(path.join(os.tmpdir(), 'shuffler-sym-'));
+    try {
+      const sourceFile = path.join(workingDir, 'Paper.docx');
+      await fs.writeFile(sourceFile, await buildPaper(paper()));
+      const request: GenerationRequest = {
+        sourceFile,
+        shuffleQuestions: true,
+        shuffleOptions: true,
+        questionExclusions: [],
+        optionExclusions: [],
+        setCount: 1,
+        seed: 'symbol',
+      };
+      const result = await new GenerationService().generate(request);
+
+      expect(result.sets[0]!.verification.ok).toBe(true);
+      expect(result.sets[0]!.optionsShuffled).toBe(7);
+    } finally {
+      await fs.rm(workingDir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('a label whose bracket comes from a picture font', () => {
+  const paper = (): FixtureSection[] =>
+    paperWith({
+      stem: 'Which of these is correct?',
+      optionParagraphs: [],
+      // Wingdings numbers drawings, not characters: 0x28 is a glyph, and no reading of the
+      // file can say it was meant as a bracket.
+      rawOptionParagraph: symbolBracketOptionParagraph(
+        ['first', 'second', 'third', 'none of these'],
+        'Wingdings',
+      ),
       answer: 'D',
     });
 
@@ -151,7 +211,7 @@ describe('a label whose bracket is a symbol-font character', () => {
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
     expect(parsed.reason).toBe('label-bracket-is-a-symbol');
-    expect(parsed.detail).toContain('Insert > Symbol');
+    expect(parsed.detail).toContain('Wingdings');
   });
 
   it('is listed in the dry run so the author can correct the document', async () => {
@@ -214,10 +274,10 @@ describe('an option whose content is a symbol', () => {
 
     if (!parsed.ok) throw new Error(`expected the options to parse, got ${parsed.reason}`);
     expect(parsed.options.signatures).toEqual([
-      '60|sym:Symbol:F057',
-      '50|sym:Symbol:F057',
-      '80|sym:Symbol:F057',
-      '100|sym:Symbol:F057',
+      '60ω|sym:Symbol:F057',
+      '50ω|sym:Symbol:F057',
+      '80ω|sym:Symbol:F057',
+      '100ω|sym:Symbol:F057',
     ]);
   });
 
