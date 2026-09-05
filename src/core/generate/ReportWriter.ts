@@ -207,7 +207,7 @@ export class ReportWriter {
     }
 
     for (const set of result.sets) {
-      const label = `Set ${String(set.setNumber).padStart(2, '0')}`;
+      const label = set.label;
       blocks.push({ kind: 'heading', text: label });
       const facts: ReportFact[] = [
         { label: 'File', value: set.fileName, mono: true },

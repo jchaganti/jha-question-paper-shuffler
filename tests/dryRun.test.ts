@@ -113,14 +113,15 @@ describe('dryRun', () => {
   });
 
   it('validates the request just like generate does', async () => {
-    await expect(service.dryRun(request({ setCount: 0 }))).rejects.toThrow(/between 1 and 100/);
+    await expect(service.dryRun(request({ setCount: 0 }))).rejects.toThrow(/between 2 and 100/);
+    await expect(service.dryRun(request({ setCount: 1 }))).rejects.toThrow(/at least two/);
     await expect(
       service.dryRun(request({ shuffleQuestions: false, shuffleOptions: false })),
     ).rejects.toThrow(/at least one/);
   });
 
   it('predicts the option count that generate then produces', async () => {
-    const settings = request({ setCount: 1, optionExclusions: [5] });
+    const settings = request({ setCount: 2, optionExclusions: [5] });
     const report = await service.dryRun(settings);
     const result = await service.generate(settings);
     expect(result.sets[0]!.optionsShuffled).toBe(report.optionsToShuffle);
@@ -152,7 +153,7 @@ describe('dryRun', () => {
       ),
     );
 
-    const report = await service.dryRun(request({ setCount: 1 }));
+    const report = await service.dryRun(request({ setCount: 2 }));
     const details = report.optionsKeptByTool.map((item) => `${item.detail} ${item.fix}`).join(' ');
 
     expect(report.optionsKeptByTool.length).toBeGreaterThan(0);

@@ -25,7 +25,7 @@ const request = (overrides: Partial<GenerationRequest> = {}): GenerationRequest 
   shuffleOptions: true,
   questionExclusions: [],
   optionExclusions: [],
-  setCount: 1,
+  setCount: 2,
   seed: 'page-flow',
   ...overrides,
 });

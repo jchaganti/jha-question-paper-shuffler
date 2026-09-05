@@ -145,8 +145,13 @@ const accounting = (await readFile('dist/web/shared/accounting.js', 'utf8')).rep
   '',
 );
 
+// The real letterer too, for the same reason: the stub must name sets the way the app does.
+const { setSuffix } = await import('../dist/core/generate/OutputFolder.js');
+const letterer = `const setSuffix = ${setSuffix.toString()};`;
+
 const stub = `
 ${accounting}
+${letterer}
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const PAPER = ${JSON.stringify(paper)};
 let progressListener = () => {};
@@ -224,14 +229,15 @@ window.shuffler = {
     for (let setNumber = 1; setNumber <= setCount; setNumber++) {
       for (const [stage, message, setFraction] of steps) {
         progressListener({
-          stage, message, setNumber, setCount, setFraction,
+          stage, message, setNumber, setLabel: 'Set ' + setSuffix(setNumber), setCount, setFraction,
           fraction: (setNumber - 1 + setFraction) / setCount,
         });
         await sleep(120);
       }
       sets.push({
         setNumber,
-        fileName: 'MTP-2-PCB-XI-2027_4961 - Set ' + String(setNumber).padStart(2, '0') + '.docx',
+        label: 'Set ' + setSuffix(setNumber),
+        fileName: 'MTP-2-PCB-XI-2027_4961 - 02-08-2026-09-15-Set-' + setSuffix(setNumber) + '.docx',
         filePath: 'D:\\\\papers\\\\question-sets - 31-08-2026-13-21\\\\set.docx',
         seed: 'demo#set' + setNumber,
         questionsMoved: 170 + setNumber,

@@ -305,7 +305,7 @@ describe('auto-lettered options end to end', () => {
     shuffleOptions: true,
     questionExclusions: [],
     optionExclusions: [],
-    setCount: 1,
+    setCount: 2,
     seed: 'auto-lettered',
     ...overrides,
   });

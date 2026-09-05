@@ -205,7 +205,7 @@ describe('end to end', () => {
     shuffleOptions: true,
     questionExclusions: [],
     optionExclusions: [],
-    setCount: 1,
+    setCount: 2,
     seed: 'notes',
     ...overrides,
   });

@@ -178,7 +178,7 @@ describe('a label whose bracket was typed in the Symbol font', () => {
         shuffleOptions: true,
         questionExclusions: [],
         optionExclusions: [],
-        setCount: 1,
+        setCount: 2,
         seed: 'symbol',
       };
       const result = await new GenerationService().generate(request);
@@ -225,7 +225,7 @@ describe('a label whose bracket comes from a picture font', () => {
         shuffleOptions: true,
         questionExclusions: [],
         optionExclusions: [],
-        setCount: 1,
+        setCount: 2,
       });
 
       const kept = report.optionsKeptByTool.find((item) => item.questionNumber === 1);
@@ -246,7 +246,7 @@ describe('a label whose bracket comes from a picture font', () => {
         shuffleOptions: true,
         questionExclusions: [],
         optionExclusions: [],
-        setCount: 1,
+        setCount: 2,
         seed: 'symbol',
       };
       const result = await new GenerationService().generate(request);
@@ -303,7 +303,7 @@ describe('an option whose content is a symbol', () => {
         shuffleOptions: true,
         questionExclusions: [],
         optionExclusions: [],
-        setCount: 1,
+        setCount: 2,
         seed: 'symbol-content',
       });
 

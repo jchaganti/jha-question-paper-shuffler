@@ -4,6 +4,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DocxPackage } from '../src/core/docx/DocxPackage';
 import { GenerationService } from '../src/core/generate/GenerationService';
+import { setSuffix } from '../src/core/generate/OutputFolder';
 import { OptionBlockParser, slotSignature } from '../src/core/options/OptionBlockParser';
 import { NumberingIndex } from '../src/core/parse/NumberingIndex';
 import { PaperParser } from '../src/core/parse/PaperParser';
@@ -76,10 +77,13 @@ describe('GenerationService', () => {
     // The run's date and time sit in the name, so match the shape rather than a literal.
     // `setFileName.test.ts` pins the exact format.
     expect(result.sets.map((set) => set.fileName)).toEqual([
-      expect.stringMatching(/^Sample Paper - \d{2}-\d{2}-\d{4}-\d{2}-\d{2}-Set-01\.docx$/),
-      expect.stringMatching(/^Sample Paper - \d{2}-\d{2}-\d{4}-\d{2}-\d{2}-Set-02\.docx$/),
-      expect.stringMatching(/^Sample Paper - \d{2}-\d{2}-\d{4}-\d{2}-\d{2}-Set-03\.docx$/),
+      expect.stringMatching(/^Sample Paper - \d{2}-\d{2}-\d{4}-\d{2}-\d{2}-Set-A\.docx$/),
+      expect.stringMatching(/^Sample Paper - \d{2}-\d{2}-\d{4}-\d{2}-\d{2}-Set-B\.docx$/),
+      expect.stringMatching(/^Sample Paper - \d{2}-\d{2}-\d{4}-\d{2}-\d{2}-Set-C\.docx$/),
     ]);
+    // The letter in the file name, the name shown in the UI and the label stamped into the
+    // document are one identifier, so a printed paper can be traced back to its file.
+    expect(result.sets.map((set) => set.label)).toEqual(['Set A', 'Set B', 'Set C']);
     for (const set of result.sets) {
       expect(set.verification.ok, JSON.stringify(set.verification.checks)).toBe(true);
       await expect(fs.stat(set.filePath)).resolves.toBeTruthy();
@@ -88,8 +92,8 @@ describe('GenerationService', () => {
   });
 
   it('never overwrites an earlier run, even one started in the same minute', async () => {
-    const first = await service.generate(request({ setCount: 1 }));
-    const second = await service.generate(request({ setCount: 1 }));
+    const first = await service.generate(request({ setCount: 2 }));
+    const second = await service.generate(request({ setCount: 2 }));
 
     expect(second.outputFolder).not.toBe(first.outputFolder);
     // Two runs a second apart share a timestamp, so the second folder is marked "-02".
@@ -100,7 +104,7 @@ describe('GenerationService', () => {
 
   it('keeps every question inside its own subject', async () => {
     const original = await readPaper(sourceFile);
-    const result = await service.generate(request({ setCount: 1 }));
+    const result = await service.generate(request({ setCount: 2 }));
     const generated = await readPaper(result.sets[0]!.filePath);
 
     const subjectOf = new Map(original.map((q) => [q.stem, q.subject]));
@@ -110,7 +114,7 @@ describe('GenerationService', () => {
   });
 
   it('renumbers questions 1..N without gaps', async () => {
-    const result = await service.generate(request({ setCount: 1 }));
+    const result = await service.generate(request({ setCount: 2 }));
     const generated = await readPaper(result.sets[0]!.filePath);
     expect(generated.map((q) => q.number)).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
@@ -137,7 +141,7 @@ describe('GenerationService', () => {
   it('offers exactly the same four options, only in another order', async () => {
     const original = await readPaper(sourceFile);
     const byStem = new Map(original.map((q) => [q.stem, q]));
-    const result = await service.generate(request({ setCount: 1 }));
+    const result = await service.generate(request({ setCount: 2 }));
     const generated = await readPaper(result.sets[0]!.filePath);
 
     for (const question of generated) {
@@ -150,7 +154,7 @@ describe('GenerationService', () => {
   it('keeps excluded questions at their position and excluded options in order', async () => {
     const original = await readPaper(sourceFile);
     const result = await service.generate(
-      request({ setCount: 1, questionExclusions: [2, 6], optionExclusions: [1] }),
+      request({ setCount: 2, questionExclusions: [2, 6], optionExclusions: [1] }),
     );
     const generated = await readPaper(result.sets[0]!.filePath);
 
@@ -164,7 +168,7 @@ describe('GenerationService', () => {
 
   it('does not change question order when only options are shuffled', async () => {
     const original = await readPaper(sourceFile);
-    const result = await service.generate(request({ setCount: 1, shuffleQuestions: false }));
+    const result = await service.generate(request({ setCount: 2, shuffleQuestions: false }));
     const generated = await readPaper(result.sets[0]!.filePath);
 
     expect(generated.map((q) => q.stem)).toEqual(original.map((q) => q.stem));
@@ -174,7 +178,7 @@ describe('GenerationService', () => {
   it('does not change options when only questions are shuffled', async () => {
     const original = await readPaper(sourceFile);
     const byStem = new Map(original.map((q) => [q.stem, q]));
-    const result = await service.generate(request({ setCount: 1, shuffleOptions: false }));
+    const result = await service.generate(request({ setCount: 2, shuffleOptions: false }));
     const generated = await readPaper(result.sets[0]!.filePath);
 
     for (const question of generated) {
@@ -200,8 +204,8 @@ describe('GenerationService', () => {
   });
 
   it('produces different sets when no seed is given', async () => {
-    const first = await service.generate(request({ setCount: 1, seed: undefined }));
-    const second = await service.generate(request({ setCount: 1, seed: undefined }));
+    const first = await service.generate(request({ setCount: 2, seed: undefined }));
+    const second = await service.generate(request({ setCount: 2, seed: undefined }));
     expect(second.seed).not.toBe(first.seed);
 
     const a = await DocxPackage.fromBuffer(await fs.readFile(first.sets[0]!.filePath));
@@ -210,12 +214,12 @@ describe('GenerationService', () => {
   });
 
   it('records the run seed in the report', async () => {
-    const result = await service.generate(request({ setCount: 1, seed: 'march-batch' }));
+    const result = await service.generate(request({ setCount: 2, seed: 'march-batch' }));
     expect(pdfText(await fs.readFile(result.reportFile))).toContain('Seed march-batch');
   });
 
   it('writes the report as a PDF a reader can open', async () => {
-    const result = await service.generate(request({ setCount: 1 }));
+    const result = await service.generate(request({ setCount: 2 }));
     const pdf = await fs.readFile(result.reportFile);
 
     expect(result.reportFile.endsWith('_generation-report.pdf')).toBe(true);
@@ -231,7 +235,7 @@ describe('GenerationService', () => {
       pdfLines(pdf).filter((line) => /^\d+ \d+ \S/.test(line));
 
     it('quotes letters for a paper whose key is written A, B, C, D', async () => {
-      const result = await service.generate(request({ setCount: 1 }));
+      const result = await service.generate(request({ setCount: 2 }));
       const rows = mappingRows(await fs.readFile(result.reportFile));
 
       expect(rows.length).toBeGreaterThan(0);
@@ -246,7 +250,7 @@ describe('GenerationService', () => {
         sourceFile,
         await buildPaper(defaultSections(), { answerKeyAnswerFormat: 'digit-bracketed' }),
       );
-      const result = await service.generate(request({ setCount: 1 }));
+      const result = await service.generate(request({ setCount: 2 }));
       const rows = mappingRows(await fs.readFile(result.reportFile));
 
       expect(rows.length).toBeGreaterThan(0);
@@ -263,7 +267,7 @@ describe('GenerationService', () => {
         sourceFile,
         await buildPaper(defaultSections(), { answerKeyAnswerFormat: 'roman-bracketed' }),
       );
-      const result = await service.generate(request({ setCount: 1 }));
+      const result = await service.generate(request({ setCount: 2 }));
       const rows = mappingRows(await fs.readFile(result.reportFile));
 
       expect(rows.length).toBeGreaterThan(0);
@@ -273,14 +277,15 @@ describe('GenerationService', () => {
   });
 
   describe('set file names carry the run date and time', () => {
-    const NAME_RE = /^Sample Paper - (\d{2}-\d{2}-\d{4}-\d{2}-\d{2})-Set-(\d{2})\.docx$/;
+    const NAME_RE = /^Sample Paper - (\d{2}-\d{2}-\d{4}-\d{2}-\d{2})-Set-([A-Z]+)\.docx$/;
 
-    it('names every file "<paper> - DD-MM-YYYY-HH-MM-Set-NN.docx"', async () => {
+    it('names every file "<paper> - DD-MM-YYYY-HH-MM-Set-X.docx"', async () => {
       const result = await service.generate(request({ setCount: 3 }));
 
       for (const set of result.sets) {
         expect(set.fileName).toMatch(NAME_RE);
-        expect(NAME_RE.exec(set.fileName)![2]).toBe(String(set.setNumber).padStart(2, '0'));
+        // The letter is the set's position in the run: the first file is Set-A.
+        expect(NAME_RE.exec(set.fileName)![2]).toBe(setSuffix(set.setNumber));
       }
     });
 
@@ -294,7 +299,7 @@ describe('GenerationService', () => {
     });
 
     it('uses that same instant for the report and for GenerationResult', async () => {
-      const result = await service.generate(request({ setCount: 1 }));
+      const result = await service.generate(request({ setCount: 2 }));
       const report = pdfText(await fs.readFile(result.reportFile));
 
       const at = new Date(result.generatedAt);
@@ -322,13 +327,13 @@ describe('GenerationService', () => {
   });
 
   it('stamps the set number onto the answer key page', async () => {
-    const result = await service.generate(request({ setCount: 1 }));
+    const result = await service.generate(request({ setCount: 2 }));
     const pkg = await DocxPackage.fromBuffer(await fs.readFile(result.sets[0]!.filePath));
-    expect(pkg.getPartText('word/document.xml')).toContain('SET 01');
+    expect(pkg.getPartText('word/document.xml')).toContain('SET A');
   });
 
   it('leaves every other part of the document untouched', async () => {
-    const result = await service.generate(request({ setCount: 1 }));
+    const result = await service.generate(request({ setCount: 2 }));
     const before = await DocxPackage.fromBuffer(await fs.readFile(sourceFile));
     const after = await DocxPackage.fromBuffer(await fs.readFile(result.sets[0]!.filePath));
 
@@ -338,7 +343,11 @@ describe('GenerationService', () => {
   });
 
   it('rejects invalid input', async () => {
-    await expect(service.generate(request({ setCount: 0 }))).rejects.toThrow(/between 1 and 100/);
+    await expect(service.generate(request({ setCount: 0 }))).rejects.toThrow(/between 2 and 100/);
+    // One set is not a set of anything: refused, with a reason rather than a bare range.
+    await expect(service.generate(request({ setCount: 1 }))).rejects.toThrow(/at least two/);
+    await expect(service.generate(request({ setCount: 101 }))).rejects.toThrow(/between 2 and 100/);
+    await expect(service.generate(request({ setCount: 2.5 }))).rejects.toThrow(/whole number/);
     await expect(
       service.generate(request({ shuffleQuestions: false, shuffleOptions: false })),
     ).rejects.toThrow(/at least one/);

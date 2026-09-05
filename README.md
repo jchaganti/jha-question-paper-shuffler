@@ -81,7 +81,7 @@ could not be read*, *what was read but is worth tidying*, *what was read fine bu
 mean the same once its options move* — so they are never merged. The fourth is about a
 question's **position**, which is a separate axis.
 
-**Generate** writes the files, showing two progress bars: overall (`Set 2 of 4 · 1
+**Generate** writes the files, showing two progress bars: overall (`Set B · 2 of 4 · 1
 generated`) and the current set's step (`Shuffling options — 36% of this set`). The steps
 are: reading, shuffling options, re-ordering questions and updating the answer key,
 packaging, writing, verifying.
@@ -108,7 +108,7 @@ the shuffler, the tests, the CLI — works without Electron.)
 npm test
 ```
 
-315 unit and end-to-end tests. They build question papers in memory (see
+330 unit and end-to-end tests. They build question papers in memory (see
 `tests/support/PaperFixture.ts`), so they run without any sample document.
 
 To review the UI without Electron and without a real paper:
@@ -210,7 +210,7 @@ regenerated; `npm run pack` and `npm run dist` both refresh it first.
 | Keep these question numbers in place | Comma separated printed question numbers (`10,11,19,20`). Ranges like `10-14` also work. These questions stay at their exact position. |
 | Shuffle option order | Permutes the four option contents of each question. |
 | Keep the option order of these questions | Comma separated printed question numbers whose options must not move. Use it for "None of these", "Both (A) and (B)", or any question where option order carries meaning. |
-| Number of sets | 1–100. |
+| Number of sets | 2–100. One set is refused: there is nothing to tell a single "shuffled" paper apart from, and it invites handing it out as though it were one of several. |
 | Seed | Optional — see below. Leave it blank for a normal run. |
 | Keep each question on one page | On by default. A question that no longer fits at the bottom of a page starts on the next page instead of being split across two. See below. |
 
@@ -383,8 +383,8 @@ Written next to the source paper, in a new folder:
 ```
 <paper folder>/
   question-sets - 31-08-2026-13-21/       <- one folder per run; never overwritten
-    <paper name> - 31-08-2026-13-21-Set-01.docx
-    <paper name> - 31-08-2026-13-21-Set-02.docx
+    <paper name> - 31-08-2026-13-21-Set-A.docx
+    <paper name> - 31-08-2026-13-21-Set-B.docx
     _generation-report.pdf
 ```
 
@@ -401,7 +401,7 @@ Each generated paper:
 - has its questions renumbered automatically by Word (numbering is a Word list, so
   re-ordering blocks renumbers them);
 - carries the answer key for **that** set, in the original table, with the set label
-  appended to the answer-key title (`MODEL TEST PAPER-2 (A)  –  SET 01`);
+  appended to the answer-key title (`MODEL TEST PAPER-2 (A)  –  SET A`);
 - keeps every embedded MathType/OLE equation, image, table, style, header and footer
   from the source, because the tool edits `word/document.xml` and copies every other part
   of the package byte-for-byte;

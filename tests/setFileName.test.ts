@@ -1,7 +1,7 @@
 /**
  * How a generated set is named.
  *
- * The name carries the source paper, the run's date and time, and the set number, so that
+ * The name carries the source paper, the run's date and time, and the set's letter, so that
  * sets from different runs of the same paper never look alike in a folder listing.
  */
 import { promises as fs } from 'node:fs';
@@ -12,28 +12,31 @@ import {
   OutputFolderResolver,
   fileNameTimestamp,
   readableTimestamp,
+  setDisplayName,
   setFileName,
   setLabel,
+  setSuffix,
 } from '../src/core/generate/OutputFolder';
 
 /** 31 August 2026, 13:21 local time - the example from the request. */
 const when = new Date(2026, 7, 31, 13, 21, 45);
 
 describe('setFileName', () => {
-  it('appends the run date, time and set number', () => {
+  it('appends the run date, time and the set letter', () => {
     expect(setFileName('C:/papers/MTP-2 Group A.docx', 1, when)).toBe(
-      'MTP-2 Group A - 31-08-2026-13-21-Set-01.docx',
+      'MTP-2 Group A - 31-08-2026-13-21-Set-A.docx',
     );
   });
 
-  it('pads the set number to two digits', () => {
-    expect(setFileName('paper.docx', 7, when)).toContain('-Set-07.docx');
-    expect(setFileName('paper.docx', 12, when)).toContain('-Set-12.docx');
+  it('letters the sets A, B, C rather than numbering them', () => {
+    expect(setFileName('paper.docx', 2, when)).toContain('-Set-B.docx');
+    expect(setFileName('paper.docx', 7, when)).toContain('-Set-G.docx');
+    expect(setFileName('paper.docx', 12, when)).toContain('-Set-L.docx');
   });
 
   it('keeps the source paper name, including its dots and spaces', () => {
     expect(setFileName('C:/q/Nano MTP 2 Physics_XI-2023__3418 _11.03.2023.docx', 3, when)).toBe(
-      'Nano MTP 2 Physics_XI-2023__3418 _11.03.2023 - 31-08-2026-13-21-Set-03.docx',
+      'Nano MTP 2 Physics_XI-2023__3418 _11.03.2023 - 31-08-2026-13-21-Set-C.docx',
     );
   });
 
@@ -113,10 +116,43 @@ describe('the output folder', () => {
   });
 });
 
-describe('setLabel', () => {
-  it('is unchanged - the label stamped inside the document stays "SET NN"', () => {
-    // The timestamp belongs in the file name, not printed on the answer key page.
-    expect(setLabel(1)).toBe('SET 01');
-    expect(setLabel(11)).toBe('SET 11');
+describe('setSuffix', () => {
+  it('letters the sets A to Z', () => {
+    expect(setSuffix(1)).toBe('A');
+    expect(setSuffix(2)).toBe('B');
+    expect(setSuffix(26)).toBe('Z');
+  });
+
+  it('carries on past Z the way a spreadsheet names its columns', () => {
+    // 100 is the largest run the tool allows, so CV is as far as this ever goes.
+    expect(setSuffix(27)).toBe('AA');
+    expect(setSuffix(28)).toBe('AB');
+    expect(setSuffix(52)).toBe('AZ');
+    expect(setSuffix(53)).toBe('BA');
+    expect(setSuffix(100)).toBe('CV');
+  });
+
+  it('gives every set of the largest allowed run a name of its own', () => {
+    const names = Array.from({ length: 100 }, (_unused, index) => setSuffix(index + 1));
+    expect(new Set(names).size).toBe(100);
+    for (const name of names) expect(name).toMatch(/^[A-Z]+$/);
+  });
+
+  it('refuses a set number that is not a whole number from 1 upwards', () => {
+    expect(() => setSuffix(0)).toThrow(/from 1 upwards/);
+    expect(() => setSuffix(-1)).toThrow(/from 1 upwards/);
+    expect(() => setSuffix(1.5)).toThrow(/from 1 upwards/);
+  });
+});
+
+describe('setLabel and setDisplayName', () => {
+  it('name the set the same way the file name does', () => {
+    // One identifier in three places: the file name, the stamp inside the document and the
+    // name on screen. A printed paper is traced back to its file by its letter alone.
+    expect(setLabel(1)).toBe('SET A');
+    expect(setLabel(11)).toBe('SET K');
+    expect(setDisplayName(1)).toBe('Set A');
+    expect(setDisplayName(11)).toBe('Set K');
+    expect(setFileName('paper.docx', 11, when)).toContain(`-Set-${setSuffix(11)}.docx`);
   });
 });

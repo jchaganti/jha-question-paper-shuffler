@@ -35,7 +35,12 @@ export interface GenerationRequest {
    * assertion-reason sets where the option order carries meaning.
    */
   readonly optionExclusions: readonly number[];
-  /** Number of sets to generate (>= 1). */
+  /**
+   * Number of sets to generate, 2 to 100.
+   *
+   * At least two: a run of one produces a single shuffled paper with nothing to distinguish
+   * it from, which is not what this tool is for.
+   */
   readonly setCount: number;
   /**
    * Keep each question whole on one page: a question that would not fit at the bottom of
@@ -312,6 +317,12 @@ export interface QuestionMapping {
 
 export interface GeneratedSet {
   readonly setNumber: number;
+  /**
+   * What this set is called: "Set A", "Set B". Named in the main process so the UI, the CLI
+   * and the report all call it the same thing, and so the renderer needs no runtime import
+   * to letter it. The same letter ends the file name and is stamped into the document.
+   */
+  readonly label: string;
   readonly fileName: string;
   readonly filePath: string;
   readonly seed: string;
@@ -363,6 +374,8 @@ export interface ProgressEvent {
   readonly message: string;
   /** 1-based index of the set being built, when a set is being built. */
   readonly setNumber?: number;
+  /** That set's name, "Set A" - the same one its file will carry. */
+  readonly setLabel?: string;
   readonly setCount?: number;
   /** 0..1 progress inside the current set. */
   readonly setFraction?: number;

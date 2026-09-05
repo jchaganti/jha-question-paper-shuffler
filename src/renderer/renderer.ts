@@ -382,7 +382,7 @@ function renderProgress(event: ProgressEvent): void {
     progressSet.textContent =
       event.stage === 'done'
         ? `${event.setCount} of ${event.setCount} sets generated`
-        : `Set ${event.setNumber} of ${event.setCount} · ${done} generated`;
+        : `${event.setLabel ?? `Set ${event.setNumber}`} · ${event.setNumber} of ${event.setCount} · ${done} generated`;
   } else {
     progressSet.textContent = event.message;
   }
@@ -434,7 +434,7 @@ function renderResults(result: GenerationResult): void {
     notice.append(element('strong', '', 'Verification problems'));
     for (const set of failed) {
       for (const check of set.verification.checks.filter((c) => !c.ok)) {
-        notice.append(element('div', '', `Set ${set.setNumber}: ${check.name} — ${check.detail}`));
+        notice.append(element('div', '', `${set.label}: ${check.name} — ${check.detail}`));
       }
     }
     resultsPanel.append(notice);

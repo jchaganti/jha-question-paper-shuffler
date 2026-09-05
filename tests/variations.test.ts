@@ -167,7 +167,7 @@ describe('hard failures (explained, never silent)', () => {
         shuffleOptions: true,
         questionExclusions: [],
         optionExclusions: [],
-        setCount: 1,
+        setCount: 2,
       }),
     ).rejects.toThrow(/must be a \.docx file/);
   });

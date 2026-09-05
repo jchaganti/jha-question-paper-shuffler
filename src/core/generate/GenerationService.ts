@@ -31,7 +31,7 @@ import { FALLBACK_SUBJECT, type ParsedPaper, type PaperSection } from '../parse/
 import { ShufflePlanner, resolveSeed } from '../shuffle/ShufflePlanner';
 import { SetVerifier } from '../verify/SetVerifier';
 import { OptionAdvisor } from './OptionAdvisor';
-import { OutputFolderResolver, setFileName, setLabel } from './OutputFolder';
+import { OutputFolderResolver, setDisplayName, setFileName, setLabel } from './OutputFolder';
 import { ReportWriter } from './ReportWriter';
 import { SetBuilder } from './SetBuilder';
 
@@ -207,6 +207,7 @@ export class GenerationService {
         stage,
         message,
         setNumber,
+        setLabel: setDisplayName(setNumber),
         setCount,
         setFraction,
         fraction: (setNumber - 1 + setFraction) / setCount,
@@ -214,7 +215,7 @@ export class GenerationService {
 
     const sets: GeneratedSet[] = [];
     for (const plan of plans) {
-      const label = `Set ${String(plan.setNumber).padStart(2, '0')}`;
+      const label = setDisplayName(plan.setNumber);
       // The builder reports 0..1 for its own work, which is ~85% of a set.
       const BUILD_SHARE = 0.85;
       emit('options', plan.setNumber, 0, `Building ${label}`);
@@ -240,6 +241,7 @@ export class GenerationService {
 
       sets.push({
         setNumber: plan.setNumber,
+        label,
         fileName,
         filePath,
         seed: plan.seed,
@@ -277,8 +279,13 @@ export class GenerationService {
     if (path.extname(request.sourceFile).toLowerCase() !== '.docx') {
       throw new Error('The question paper must be a .docx file (Word 2007 or later).');
     }
-    if (!Number.isInteger(request.setCount) || request.setCount < 1 || request.setCount > 100) {
-      throw new Error('Number of sets must be a whole number between 1 and 100.');
+    // At least two: one set is the paper the user already has, and generating a single
+    // "shuffled" paper invites handing it out as if it were a set of several.
+    if (!Number.isInteger(request.setCount) || request.setCount < 2 || request.setCount > 100) {
+      throw new Error(
+        'Number of sets must be a whole number between 2 and 100. There is nothing to ' +
+          'compare a single set against - generate at least two.',
+      );
     }
     if (!request.shuffleQuestions && !request.shuffleOptions) {
       throw new Error('Select at least one of "shuffle questions" or "shuffle options".');

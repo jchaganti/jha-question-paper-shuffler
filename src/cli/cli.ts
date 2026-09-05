@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const file = typeof args.file === 'string' ? args.file : '';
   if (!file) {
-    console.error('Usage: --file <paper.docx> [--sets N] [--shuffle-questions] [--shuffle-options]');
+    console.error('Usage: --file <paper.docx> [--sets N (2-100, default 2)] [--shuffle-questions] [--shuffle-options]');
     console.error('       [--keep-question-positions 1,2] [--keep-option-order 3,4] [--seed text]');
     console.error('       [--allow-page-splits] [--inspect] [--dry-run]');
     process.exitCode = 2;
@@ -70,7 +70,7 @@ async function main(): Promise<void> {
 
   const request: GenerationRequest = {
     sourceFile: file,
-    setCount: typeof args.sets === 'string' ? Number(args.sets) : 1,
+    setCount: typeof args.sets === 'string' ? Number(args.sets) : 2,
     shuffleQuestions: args['shuffle-questions'] === true,
     shuffleOptions: args['shuffle-options'] === true,
     questionExclusions: parseNumberList(typeof args['keep-question-positions'] === 'string' ? args['keep-question-positions'] : ''),

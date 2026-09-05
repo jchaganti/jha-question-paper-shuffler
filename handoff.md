@@ -61,7 +61,7 @@ exact box/label to fix, an entry in the in-app **best practices** list
 ```bash
 npm run build        # tsc main (CommonJS) + renderer (ESM) + copy static assets
 npm start            # build, then launch Electron
-npx vitest run       # 326 tests, 26 files
+npx vitest run       # 330 tests, 26 files
 npm run portable     # release/Question Paper Shuffler <v> (portable).zip - shareable, no archiver needed
 npm run dist         # release/... Setup <v>.exe - needs a 7za the machine will run, see item 26
 npm run cli -- --file "paper.docx" --shuffle-questions --shuffle-options --dry-run
@@ -282,7 +282,7 @@ Commits, oldest first:
     a "report names options the way the paper names them" block in `generation.test.ts`.
 
 11. **Set file names carry the run's date and time**:
-    `<paper> - 31-08-2026-13-21-Set-01.docx`. `setFileName` takes a `Date`;
+    `<paper> - 31-08-2026-13-21-Set-A.docx` (lettered since item 33). `setFileName` takes a `Date`;
     `fileNameTimestamp` renders `DD-MM-YYYY-HH-MM` in **local** time (the clock the user
     read when they pressed Generate).
 
@@ -780,6 +780,33 @@ Commits, oldest first:
     column summed group memberships, and FST-1 has a question held by two different pictures,
     so it read 16 for 15 questions. Now distinct; that is the only corpus number that moved.
 
+33. **Sets are lettered, and a run of one is refused.** `setSuffix` / `setDisplayName` in
+    `OutputFolder.ts`, `GeneratedSet.label`, `ProgressEvent.setLabel`.
+
+    Asked for directly: file names should end `A`, `B`, `C` rather than `01`, `02`, `03`,
+    and a set count of 1 should be an error.
+
+    - `setSuffix` is bijective base 26: 26 is `Z`, 27 is `AA`, and 100 - the largest run
+      allowed - is `CV`. It throws on anything that is not a whole number from 1 upwards,
+      so a bad set number fails where it is named rather than producing a file called
+      `Set-.docx`.
+    - The **same letter** now appears in three places that used to disagree in shape: the
+      file name (`Set-B`), the label stamped beside the answer key inside the document
+      (`SET B`, was `SET 02`), and the name on screen and in the report (`Set B`). The ask
+      was only about file names, but leaving the document stamped `SET 02` inside a file
+      called `Set-B` would have created exactly the kind of contradiction item 32 was about.
+      `GeneratedSet.label` and `ProgressEvent.setLabel` carry it, because `renderer.ts` may
+      not import anything at runtime.
+    - The progress line keeps the position as well: `Set B · 2 of 4 · 1 generated`. The
+      letter identifies, the count is progress; both are wanted.
+    - `setCount` must now be 2..100, and the message says why rather than just restating the
+      range: *"There is nothing to compare a single set against - generate at least two."*
+      The number input's `min` went to 2, and the CLI's default `--sets` from 1 to 2.
+
+    52 tests were using `setCount: 1` and failed at once, which is the right kind of
+    failure - they were exercising an input that is no longer valid. `ui-harness.mjs` inlines
+    the real `setSuffix` alongside the real `accountFor`, for the same reason.
+
 ## 5 · Decisions worth not relitigating
 
 | Decision | Why |
@@ -830,7 +857,7 @@ Commits, oldest first:
 
 ## 6 · Current state
 
-- **326 tests pass**, 26 files. `npx vitest run`.
+- **330 tests pass**, 26 files. `npx vitest run`.
 - Renderer type-checks; UI harness builds; Electron launches clean.
 
 ### Paper corpus (`C:\ps\q-paper`)

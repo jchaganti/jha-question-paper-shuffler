@@ -203,7 +203,7 @@ describe('generating from a paper divided into sections', () => {
         shuffleOptions: true,
         questionExclusions: [],
         optionExclusions: [],
-        setCount: 1,
+        setCount: 2,
       });
 
       expect(report.groups).toEqual([

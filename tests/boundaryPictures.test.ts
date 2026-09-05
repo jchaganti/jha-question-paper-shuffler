@@ -121,7 +121,7 @@ describe('generating a paper that has one', () => {
     shuffleOptions: true,
     questionExclusions: [],
     optionExclusions: [],
-    setCount: 1,
+    setCount: 2,
     seed: 'boundary',
     ...overrides,
   });
