@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type {
   DryRunReport,
-  DryRunSubject,
+  DryRunGroup,
   GeneratedSet,
   GenerationRequest,
   GenerationResult,
@@ -10,16 +10,24 @@ import type {
   ProgressEvent,
   QuestionLayoutNote,
   SkippedOptionShuffle,
-  SubjectSummary,
+  GroupSummary,
 } from '../../shared/types';
+import {
+  OPTION_LABELS,
+  QUESTION_LABELS,
+  accountFor,
+  staleListWarning,
+  unknownNumbers,
+} from '../../shared/accounting';
 import { groupLayoutNotes } from '../../shared/layoutNotes';
+import { groupSkippedOptions } from '../../shared/skipReasons';
 import { DocxPackage } from '../docx/DocxPackage';
 import type { IOptionSetParser } from '../options/OptionSet';
 import { OptionSetParser } from '../options/OptionSetParser';
 import { NumberingIndex } from '../parse/NumberingIndex';
 import { PaperParser } from '../parse/PaperParser';
 import { pinnedQuestionNumbers, questionsPinnedByPictures } from '../parse/BoundaryPictures';
-import type { ParsedPaper } from '../parse/PaperModel';
+import { FALLBACK_SUBJECT, type ParsedPaper, type PaperSection } from '../parse/PaperModel';
 import { ShufflePlanner, resolveSeed } from '../shuffle/ShufflePlanner';
 import { SetVerifier } from '../verify/SetVerifier';
 import { OptionAdvisor } from './OptionAdvisor';
@@ -63,54 +71,63 @@ export class GenerationService {
     const { paper, optionParser } = await this.parse(request.sourceFile);
     const summary = this.summarise(request.sourceFile, paper, optionParser);
 
-    const questionExclusions = new Set(request.questionExclusions);
-    const optionExclusions = new Set(request.optionExclusions);
-    const unshufflable = new Set(summary.unshufflableOptions.map((item) => item.questionNumber));
-    // Kept separate from the user's own list, so a number the tool pinned is never reported
-    // back as something the user asked for - or as a number this paper does not have.
-    const pinned = new Set(pinnedQuestionNumbers(summary.pinnedQuestions));
-    const allNumbers = new Set(
-      paper.sections.flatMap((section) => section.blocks.map((block) => block.printedNumber)),
-    );
+    // Both shuffles are split the same way, once, and everything the report says is counted
+    // off these four sets - so the section table, the totals and the findings cannot drift
+    // apart, and no question is ever counted twice or left out.
+    const questionAccounting = accountFor({
+      questionNumbers: summary.questionNumbers,
+      active: request.shuffleQuestions,
+      keptByTool: pinnedQuestionNumbers(summary.pinnedQuestions),
+      keptByUser: request.questionExclusions,
+      labels: QUESTION_LABELS,
+    });
+    const optionAccounting = accountFor({
+      questionNumbers: summary.questionNumbers,
+      active: request.shuffleOptions,
+      keptByTool: summary.unshufflableOptions.map((item) => item.questionNumber),
+      keptByUser: request.optionExclusions,
+      labels: OPTION_LABELS,
+    });
+    const questionsKept = new Set([...questionAccounting.keptByTool, ...questionAccounting.keptByUser]);
+    const optionsKept = new Set([...optionAccounting.keptByTool, ...optionAccounting.keptByUser]);
+    const alreadyLeftAlone = new Set([
+      ...summary.unshufflableOptions.map((item) => item.questionNumber),
+      ...request.optionExclusions,
+    ]);
 
-    const subjects: DryRunSubject[] = paper.sections.map((section) => {
+    const groups: DryRunGroup[] = withQuestions(paper).map((section) => {
       const numbers = section.blocks.map((block) => block.printedNumber);
       return {
-        subject: section.subject,
+        group: section.label,
         questionCount: numbers.length,
-        movable: request.shuffleQuestions
-          ? numbers.filter((n) => !questionExclusions.has(n) && !pinned.has(n)).length
-          : 0,
+        movable: request.shuffleQuestions ? numbers.filter((n) => !questionsKept.has(n)).length : 0,
         optionsShuffled: request.shuffleOptions
-          ? numbers.filter((n) => !optionExclusions.has(n) && !unshufflable.has(n)).length
+          ? numbers.filter((n) => !optionsKept.has(n)).length
           : 0,
       };
     });
 
     const warnings: string[] = [];
-    const unknownQuestions = [...questionExclusions].filter((n) => !allNumbers.has(n));
-    const unknownOptions = [...optionExclusions].filter((n) => !allNumbers.has(n));
+    const unknownQuestions = unknownNumbers(summary.questionNumbers, request.questionExclusions);
+    const unknownOptions = unknownNumbers(summary.questionNumbers, request.optionExclusions);
     if (unknownQuestions.length > 0) {
-      warnings.push(
-        `This paper has no question ${unknownQuestions.join(', ')}, so those entries in ` +
-          '"keep these question numbers in place" will have no effect.',
-      );
+      warnings.push(staleListWarning(unknownQuestions, 'keep these question numbers in place'));
     }
     if (unknownOptions.length > 0) {
+      warnings.push(staleListWarning(unknownOptions, 'keep the option order of these questions'));
+    }
+    if (paper.sections.every((section) => section.subject === FALLBACK_SUBJECT)) {
       warnings.push(
-        `This paper has no question ${unknownOptions.join(', ')}, so those entries in ` +
-          '"keep the option order of these questions" will have no effect.',
+        groups.length === 1
+          ? 'No subject headings were recognised, so the whole paper is treated as one subject ' +
+            'and questions can move anywhere in it.'
+          : 'No subject headings were recognised, so the whole paper is treated as one subject. ' +
+            `Its ${groups.length} sections still shuffle separately.`,
       );
     }
-    if (paper.sections.length === 1 && paper.sections[0]?.subject === 'ALL') {
-      warnings.push(
-        'No subject headings were recognised, so the whole paper is treated as one subject ' +
-          'and questions can move anywhere in it.',
-      );
-    }
-    for (const subject of subjects) {
-      if (request.shuffleQuestions && subject.movable === 1) {
-        warnings.push(`Only one question is free to move in ${subject.subject}, so its order cannot change.`);
+    for (const group of groups) {
+      if (request.shuffleQuestions && group.movable === 1) {
+        warnings.push(`Only one question is free to move in ${group.group}, so its order cannot change.`);
       }
     }
 
@@ -119,16 +136,21 @@ export class GenerationService {
       setCount: request.setCount,
       shuffleQuestions: request.shuffleQuestions,
       shuffleOptions: request.shuffleOptions,
-      subjects,
-      questionsEligibleToMove: subjects.reduce((sum, subject) => sum + subject.movable, 0),
-      optionsToShuffle: subjects.reduce((sum, subject) => sum + subject.optionsShuffled, 0),
-      optionsKeptByUser: [...optionExclusions].filter((n) => allNumbers.has(n)).sort((a, b) => a - b),
+      groups,
+      questionsEligibleToMove: groups.reduce((sum, group) => sum + group.movable, 0),
+      optionsToShuffle: groups.reduce((sum, group) => sum + group.optionsShuffled, 0),
+      questionAccounting,
+      optionAccounting,
       optionsKeptByTool: summary.unshufflableOptions,
       // Only worth saying when questions were going to move at all.
       questionsKeptByTool: request.shuffleQuestions ? summary.pinnedQuestions : [],
-      // No point suggesting a question whose options are already left alone.
+      // No point suggesting a question whose options are already left alone - whether the
+      // user listed it or the tool cannot read it. Asked independently of whether options
+      // are being shuffled at all, so switching the shuffle off does not resurrect
+      // suggestions the user has already acted on.
       suggestedForExclusion: summary.advisories.filter(
-        (item) => !optionExclusions.has(item.questionNumber) && !unshufflable.has(item.questionNumber),
+        (item) =>
+          !alreadyLeftAlone.has(item.questionNumber),
       ),
       warnings,
     };
@@ -281,10 +303,13 @@ export class GenerationService {
   }
 
   private summarise(sourceFile: string, paper: ParsedPaper, optionParser: IOptionSetParser): PaperSummary {
-    const subjects: SubjectSummary[] = paper.sections.map((section) => {
+    const questionNumbers = paper.sections.flatMap((section) =>
+      section.blocks.map((block) => block.printedNumber),
+    );
+    const groups: GroupSummary[] = withQuestions(paper).map((section) => {
       const numbers = section.blocks.map((block) => block.printedNumber);
       return {
-        subject: section.subject,
+        group: section.label,
         firstQuestionNumber: numbers[0] ?? 0,
         lastQuestionNumber: numbers[numbers.length - 1] ?? 0,
         questionCount: numbers.length,
@@ -308,6 +333,7 @@ export class GenerationService {
           subject: section.subject,
           reason: parsed.reason,
           detail: parsed.detail,
+          fix: parsed.fix,
         });
       }
     }
@@ -315,9 +341,11 @@ export class GenerationService {
     return {
       sourceFile,
       questionCount: paper.questionCount,
-      subjects,
+      questionNumbers,
+      groups,
       answerStyle: paper.answerKey.style,
       unshufflableOptions,
+      unshufflableGroups: groupSkippedOptions(unshufflableOptions),
       pinnedQuestions,
       // The advisor reads the options themselves, so it needs the same parser.
       advisories: this.advisor.advise(paper, optionParser),
@@ -344,4 +372,16 @@ export function parseNumberList(input: string): number[] {
     out.add(Number(token));
   }
   return [...out].sort((a, b) => a - b);
+}
+
+/**
+ * The runs of questions worth showing the user: every section that actually holds
+ * questions.
+ *
+ * A subject heading with nothing under it is real - "BIOLOGY" above "BOTANY" and "ZOOLOGY"
+ * in one sample paper - and its nodes still have to be written out in place, so the section
+ * exists. Listing it as "BIOLOGY: 0 questions" would only puzzle whoever reads the report.
+ */
+function withQuestions(paper: ParsedPaper): PaperSection[] {
+  return paper.sections.filter((section) => section.blocks.length > 0);
 }

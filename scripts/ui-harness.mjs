@@ -9,6 +9,8 @@
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+// The real headings, so the harness cannot drift from what the app shows.
+import { SKIP_REASON_LABEL } from '../dist/shared/skipReasons.js';
 
 const dir = path.resolve('dist/web/renderer');
 const html = await readFile(path.join(dir, 'index.html'), 'utf8');
@@ -26,22 +28,46 @@ if (/^\s*import\s/m.test(renderer)) {
 }
 
 const advisory = (questionNumber, subject, kind, detail) => ({ questionNumber, subject, kind, detail });
-const skip = (questionNumber, subject, reason, detail) => ({ questionNumber, subject, reason, detail });
+const skip = (questionNumber, subject, reason, detail, fix) => ({ questionNumber, subject, reason, detail, fix });
 // Detail/fix text is only shown grouped, so the per-question note keeps a stub of each.
 const note = (questionNumber, subject, issue) => ({ questionNumber, subject, issue, detail: issue, fix: issue });
 
 const paper = {
   sourceFile: 'D:\\papers\\MTP-2-PCB-XI-2027_4961.docx',
   questionCount: 180,
-  subjects: [
-    { subject: 'PHYSICS', firstQuestionNumber: 1, lastQuestionNumber: 45, questionCount: 45 },
-    { subject: 'CHEMISTRY', firstQuestionNumber: 46, lastQuestionNumber: 90, questionCount: 45 },
-    { subject: 'BIOLOGY', firstQuestionNumber: 91, lastQuestionNumber: 180, questionCount: 90 },
+  // 1..180: this sample paper numbers straight through, as the real ones do.
+  questionNumbers: Array.from({ length: 180 }, (_unused, index) => index + 1),
+  // One row per run of questions that shuffles on its own - a subject, or a section of one.
+  groups: [
+    { group: 'PHYSICS - SECTION A', firstQuestionNumber: 1, lastQuestionNumber: 32, questionCount: 32 },
+    { group: 'PHYSICS - SECTION B', firstQuestionNumber: 33, lastQuestionNumber: 45, questionCount: 13 },
+    { group: 'CHEMISTRY - SECTION A', firstQuestionNumber: 46, lastQuestionNumber: 77, questionCount: 32 },
+    { group: 'CHEMISTRY - SECTION B', firstQuestionNumber: 78, lastQuestionNumber: 90, questionCount: 13 },
+    { group: 'BIOLOGY - PART 1 SECTION A', firstQuestionNumber: 91, lastQuestionNumber: 135, questionCount: 45 },
+    { group: 'BIOLOGY - PART 2 SECTION A', firstQuestionNumber: 136, lastQuestionNumber: 180, questionCount: 45 },
   ],
   unshufflableOptions: [
-    skip(12, 'PHYSICS', 'options-not-found', 'No "(A)...(D)" labels found; the options are probably auto-lettered by Word.'),
-    skip(50, 'CHEMISTRY', 'unexpected-label-sequence', 'Expected labels A,B,C,D but found "ABD".'),
-    skip(103, 'BIOLOGY', 'options-inside-table', 'Option labels were found inside a table.'),
+    skip(
+      12,
+      'PHYSICS',
+      'options-not-found',
+      'No option labels were found under this question - neither typed "(A)" to "(D)" nor a lettered list made by Word.',
+      'Check that this question has four options and that each one starts with its label.',
+    ),
+    skip(
+      50,
+      'CHEMISTRY',
+      'unexpected-label-sequence',
+      'This question should carry the labels (A) (B) (C) (D), but reading it gives "ABD" - (C) could not be found.',
+      'Check that this question has exactly four options, each label used once, each at the start of its line or straight after a Tab.',
+    ),
+    skip(
+      103,
+      'BIOLOGY',
+      'options-inside-table',
+      'The option labels are inside a table. An option is moved by moving its text along the line it sits on, and a table cell is not a line of text.',
+      'Select the table, then on the Layout tab choose Convert to Text, separating with tabs.',
+    ),
   ],
   pinnedQuestions: [
     {
@@ -62,6 +88,8 @@ const paper = {
     advisory(59, 'CHEMISTRY', 'references-other-option', 'Option text refers to another option: "Both (A) and (B)"'),
     advisory(136, 'BIOLOGY', 'catch-all-option', 'Contains a catch-all option: "None of the above"'),
   ],
+  // The dry-run panel shows these grouped, exactly as the main process sends them.
+  unshufflableGroups: [],
   layoutNotes: [
     note(116, 'BIOLOGY', 'mixed-auto-and-typed-labels'),
     note(127, 'BIOLOGY', 'mixed-auto-and-typed-labels'),
@@ -95,7 +123,30 @@ const paper = {
   ],
 };
 
+// Grouped the same way the main process groups them, so the panel is driven by the same
+// shape it sees in the real app rather than by a hand-written second copy.
+paper.unshufflableGroups = [...new Set(paper.unshufflableOptions.map((item) => item.reason))].map((reason) => {
+  const questions = paper.unshufflableOptions.filter((item) => item.reason === reason);
+  return {
+    reason,
+    label: SKIP_REASON_LABEL[reason],
+    fix: questions[0].fix,
+    questionNumbers: questions.map((item) => item.questionNumber).sort((a, b) => a - b),
+    questions,
+  };
+});
+
+// The real accounting, inlined into the stub rather than re-implemented in it: the whole
+// point of that module is that the three surfaces cannot disagree about the arithmetic, and
+// a hand-written copy here would be a fourth answer. It has no runtime imports, so dropping
+// the `export` keywords is all it takes to run in the page.
+const accounting = (await readFile('dist/web/shared/accounting.js', 'utf8')).replace(
+  /^export /gm,
+  '',
+);
+
 const stub = `
+${accounting}
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const PAPER = ${JSON.stringify(paper)};
 let progressListener = () => {};
@@ -105,20 +156,30 @@ window.shuffler = {
   inspect: async () => ({ ok: true, value: PAPER }),
   dryRun: async (request) => {
     await sleep(250);
-    const kept = new Set(request.optionExclusions);
-    const unshufflable = new Set(PAPER.unshufflableOptions.map((s) => s.questionNumber));
-    const pinned = new Set([
-      ...request.questionExclusions,
-      ...PAPER.pinnedQuestions.flatMap((group) => group.questionNumbers),
-    ]);
-    const subjects = PAPER.subjects.map((s) => {
+    const questionAccounting = accountFor({
+      questionNumbers: PAPER.questionNumbers,
+      active: request.shuffleQuestions,
+      keptByTool: PAPER.pinnedQuestions.flatMap((group) => group.questionNumbers),
+      keptByUser: request.questionExclusions,
+      labels: QUESTION_LABELS,
+    });
+    const optionAccounting = accountFor({
+      questionNumbers: PAPER.questionNumbers,
+      active: request.shuffleOptions,
+      keptByTool: PAPER.unshufflableOptions.map((s) => s.questionNumber),
+      keptByUser: request.optionExclusions,
+      labels: OPTION_LABELS,
+    });
+    const questionsKept = new Set([...questionAccounting.keptByTool, ...questionAccounting.keptByUser]);
+    const optionsKept = new Set([...optionAccounting.keptByTool, ...optionAccounting.keptByUser]);
+    const groups = PAPER.groups.map((s) => {
       const numbers = Array.from({ length: s.questionCount }, (_u, i) => s.firstQuestionNumber + i);
       return {
-        subject: s.subject,
+        group: s.group,
         questionCount: s.questionCount,
-        movable: request.shuffleQuestions ? numbers.filter((n) => !pinned.has(n)).length : 0,
+        movable: request.shuffleQuestions ? numbers.filter((n) => !questionsKept.has(n)).length : 0,
         optionsShuffled: request.shuffleOptions
-          ? numbers.filter((n) => !kept.has(n) && !unshufflable.has(n)).length
+          ? numbers.filter((n) => !optionsKept.has(n)).length
           : 0,
       };
     });
@@ -129,16 +190,22 @@ window.shuffler = {
         setCount: request.setCount,
         shuffleQuestions: request.shuffleQuestions,
         shuffleOptions: request.shuffleOptions,
-        subjects,
-        questionsEligibleToMove: subjects.reduce((a, s) => a + s.movable, 0),
-        optionsToShuffle: subjects.reduce((a, s) => a + s.optionsShuffled, 0),
-        optionsKeptByUser: [...kept].sort((a, b) => a - b),
+        groups,
+        questionsEligibleToMove: groups.reduce((a, s) => a + s.movable, 0),
+        optionsToShuffle: groups.reduce((a, s) => a + s.optionsShuffled, 0),
+        questionAccounting,
+        optionAccounting,
         optionsKeptByTool: PAPER.unshufflableOptions,
         questionsKeptByTool: request.shuffleQuestions ? PAPER.pinnedQuestions : [],
-        suggestedForExclusion: PAPER.advisories.filter((a) => !kept.has(a.questionNumber)),
-        warnings: request.questionExclusions.includes(999)
-          ? ['This paper has no question 999, so those entries will have no effect.']
-          : [],
+        suggestedForExclusion: PAPER.advisories.filter((a) => !optionsKept.has(a.questionNumber)),
+        warnings: [
+          ...(unknownNumbers(PAPER.questionNumbers, request.questionExclusions).length > 0
+            ? [staleListWarning(unknownNumbers(PAPER.questionNumbers, request.questionExclusions), 'keep these question numbers in place')]
+            : []),
+          ...(unknownNumbers(PAPER.questionNumbers, request.optionExclusions).length > 0
+            ? [staleListWarning(unknownNumbers(PAPER.questionNumbers, request.optionExclusions), 'keep the option order of these questions')]
+            : []),
+        ],
       },
     };
   },

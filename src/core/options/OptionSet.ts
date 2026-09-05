@@ -29,7 +29,14 @@ export type OptionSetResult =
        */
       readonly notes: readonly OptionLayoutNote[];
     }
-  | { readonly ok: false; readonly reason: SkipReason; readonly detail: string };
+  | {
+      readonly ok: false;
+      readonly reason: SkipReason;
+      /** What is wrong, naming the option it is wrong with. */
+      readonly detail: string;
+      /** What to change in Word so that this question can be shuffled. */
+      readonly fix: string;
+    };
 
 export interface IOptionSetParser {
   parse(block: QuestionBlock): OptionSetResult;

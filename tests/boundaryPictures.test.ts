@@ -163,7 +163,7 @@ describe('generating a paper that has one', () => {
 
     expect(report.questionsKeptByTool).toHaveLength(1);
     expect(report.questionsKeptByTool[0]!.questionNumbers).toEqual([3, 4]);
-    expect(report.subjects[0]!.movable).toBe(report.paper.questionCount - 2);
+    expect(report.groups[0]!.movable).toBe(report.paper.questionCount - 2);
   });
 
   it('says nothing about them when questions are not being shuffled', async () => {
@@ -177,8 +177,12 @@ describe('generating a paper that has one', () => {
   it('does not report them as something the user asked for', async () => {
     const report = await service.dryRun(request());
 
-    expect(report.optionsKeptByUser).toEqual([]);
-    expect(report.warnings.join(' ')).not.toContain('no question');
+    // A question the tool pins counts as the tool's doing, never as the user's - and its
+    // number is never reported back as one this paper does not have.
+    expect(report.questionAccounting.keptByUser).toEqual([]);
+    expect(report.questionAccounting.keptByTool.length).toBeGreaterThan(0);
+    expect(report.optionAccounting.keptByUser).toEqual([]);
+    expect(report.warnings.join(' ')).not.toContain('does not have');
   });
 
   it('still verifies', async () => {

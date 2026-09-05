@@ -60,7 +60,7 @@ describe('GenerationService', () => {
   it('reports what it found in the paper', async () => {
     const summary = await service.inspect(sourceFile);
     expect(summary.questionCount).toBe(7);
-    expect(summary.subjects.map((s) => s.subject)).toEqual(['PHYSICS', 'CHEMISTRY']);
+    expect(summary.groups.map((g) => g.group)).toEqual(['PHYSICS', 'CHEMISTRY']);
     // Question 4 is auto-lettered by Word; that layout is supported, so nothing is skipped.
     expect(summary.unshufflableOptions).toEqual([]);
     // Question 5 has a "None of these" option.

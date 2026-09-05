@@ -20,7 +20,7 @@ export type OptionLetter = (typeof OPTION_LETTERS)[number];
 export interface GenerationRequest {
   /** Absolute path of the original question paper (.docx). */
   readonly sourceFile: string;
-  /** Shuffle the position of questions inside each subject. */
+  /** Shuffle the position of questions inside each section (a subject, or a part of one). */
   readonly shuffleQuestions: boolean;
   /** Shuffle the order of the four options of each question. */
   readonly shuffleOptions: boolean;
@@ -73,7 +73,34 @@ export interface SkippedOptionShuffle {
   readonly questionNumber: number;
   readonly subject: string;
   readonly reason: SkipReason;
+  /** What is wrong with this question, in the author's terms, naming the option. */
   readonly detail: string;
+  /** What to change in the Word document so that this question can be shuffled. */
+  readonly fix: string;
+}
+
+/**
+ * Skipped questions gathered by problem, ready to display - the same shape as
+ * `LayoutNoteGroup`, and for the same reason: a paper typed one way goes wrong the same way
+ * many times over, and the fix is worth stating once. See `shared/skipReasons.ts`.
+ */
+export interface SkippedOptionGroup {
+  readonly reason: SkipReason;
+  /** Plain-language heading for someone who only types the paper. */
+  readonly label: string;
+  /** What to change in the Word document. */
+  readonly fix: string;
+  /** Affected question numbers, ascending. */
+  readonly questionNumbers: readonly number[];
+  /** The questions themselves, in number order, each with its own detail. */
+  readonly questions: readonly SkippedOptionShuffle[];
+  /**
+   * The one thing they all say, when every question in the group says the same thing -
+   * which is the common case for a problem that is about the layout rather than about a
+   * particular option. Shown once instead of once per question; undefined when the details
+   * differ and each question has something of its own to say.
+   */
+  readonly sharedDetail?: string;
 }
 
 /**
@@ -133,8 +160,14 @@ export interface OptionAdvisory {
   readonly detail: string;
 }
 
-export interface SubjectSummary {
-  readonly subject: string;
+/**
+ * One run of questions that shuffle among themselves. Usually a subject, but a subject
+ * divided into "SECTION A" and "SECTION B" - or into parts above those - contributes one
+ * of these per division, because a question must never cross such a boundary.
+ */
+export interface GroupSummary {
+  /** "PHYSICS", or "PHYSICS - SECTION B" when the subject is divided. */
+  readonly group: string;
   readonly firstQuestionNumber: number;
   readonly lastQuestionNumber: number;
   readonly questionCount: number;
@@ -158,14 +191,26 @@ export interface PinnedQuestionGroup {
 export interface PaperSummary {
   readonly sourceFile: string;
   readonly questionCount: number;
-  readonly subjects: readonly SubjectSummary[];
+  /** Every run of questions that shuffles on its own - one per subject, or per section. */
+  readonly groups: readonly GroupSummary[];
   /**
    * How this paper names an option - letters `(A)`, digits `(1)`, roman numerals `(i)` -
    * read from its own answer key. Answers shown back to the user are rendered through it.
    */
   readonly answerStyle: AnswerStyle;
+  /**
+   * Every question number printed in this paper, ascending.
+   *
+   * The one place that says which numbers exist. Every count the report shows is derived
+   * from this list, and so is every check on the numbers the user typed - so a number that
+   * belongs to a different paper is always caught, and the report's arithmetic can never
+   * disagree with its own section table.
+   */
+  readonly questionNumbers: readonly number[];
   /** Questions whose options cannot be shuffled safely, whatever the user asks. */
   readonly unshufflableOptions: readonly SkippedOptionShuffle[];
+  /** The same questions gathered by problem, for display. Empty when the list above is. */
+  readonly unshufflableGroups: readonly SkippedOptionGroup[];
   /** Questions that cannot be moved safely, whatever the user asks. */
   readonly pinnedQuestions: readonly PinnedQuestionGroup[];
   /** Questions worth adding to the "options not shuffled" exclusion list. */
@@ -180,13 +225,48 @@ export interface PaperSummary {
 }
 
 /** Per subject, what a dry run expects to happen with the current settings. */
-export interface DryRunSubject {
-  readonly subject: string;
+export interface DryRunGroup {
+  /** "PHYSICS", or "PHYSICS - SECTION B" when the subject is divided. */
+  readonly group: string;
   readonly questionCount: number;
   /** Questions free to move (not pinned by the exclusion list). */
   readonly movable: number;
   /** Questions whose options will be permuted. */
   readonly optionsShuffled: number;
+}
+
+/**
+ * Where every question of the paper ends up, for one of the two shuffles.
+ *
+ * The three outcomes are mutually exclusive and together cover the whole paper, so what the
+ * dry run says can be read as arithmetic - shuffled + kept by the tool + kept by you = the
+ * number of questions - rather than as three numbers that happen to appear near each other.
+ * Without that, a headline such as "options would be shuffled for 77 of 100" leaves 23
+ * questions unaccounted for and the report looks wrong even when it is right.
+ *
+ * A question the tool cannot touch counts as the tool's even when the user also listed it:
+ * taking it off the list would change nothing, so saying it is kept "because you asked"
+ * would send the user to the wrong place.
+ */
+export interface ShuffleAccounting {
+  /** Questions in the paper. Equals `shuffled + keptByTool.length + keptByUser.length`. */
+  readonly total: number;
+  /** False when this shuffle is switched off - then nothing is shuffled and both lists are empty. */
+  readonly active: boolean;
+  readonly shuffled: number;
+  /** Kept because the tool will not do it: unreadable options, or a picture holding a question. */
+  readonly keptByTool: readonly number[];
+  /** Kept only because the user listed the number, ascending. */
+  readonly keptByUser: readonly number[];
+  /**
+   * The same arithmetic as one sentence - "77 with their options shuffled + 3 the tool
+   * cannot read + 20 you asked to keep in order = 100".
+   *
+   * Worded once, in the main process, so the UI, the CLI and the PDF report cannot word it
+   * differently - and so the renderer needs no runtime import to show it. Undefined when
+   * this shuffle is switched off.
+   */
+  readonly summary?: string;
 }
 
 /**
@@ -198,13 +278,15 @@ export interface DryRunReport {
   readonly setCount: number;
   readonly shuffleQuestions: boolean;
   readonly shuffleOptions: boolean;
-  readonly subjects: readonly DryRunSubject[];
-  /** Questions free to move, in total. */
+  readonly groups: readonly DryRunGroup[];
+  /** Questions free to move, in total. Same number as `questionAccounting.shuffled`. */
   readonly questionsEligibleToMove: number;
-  /** Questions whose options will be permuted, in total. */
+  /** Questions whose options will be permuted, in total. Same as `optionAccounting.shuffled`. */
   readonly optionsToShuffle: number;
-  /** Questions whose options stay put because the user asked. */
-  readonly optionsKeptByUser: readonly number[];
+  /** Every question of the paper, split by why it will or will not move. */
+  readonly questionAccounting: ShuffleAccounting;
+  /** Every question of the paper, split by why its options will or will not be permuted. */
+  readonly optionAccounting: ShuffleAccounting;
   /** Questions whose options stay put because they cannot be parsed with certainty. */
   readonly optionsKeptByTool: readonly SkippedOptionShuffle[];
   /** Questions whose position stays put because a picture is anchored across the boundary. */

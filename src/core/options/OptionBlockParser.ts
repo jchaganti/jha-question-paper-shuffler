@@ -42,7 +42,14 @@ export interface OptionBlock {
 
 export type OptionParseResult =
   | { readonly ok: true; readonly block: OptionBlock; readonly notes: readonly OptionLayoutNote[] }
-  | { readonly ok: false; readonly reason: SkipReason; readonly detail: string };
+  | {
+      readonly ok: false;
+      readonly reason: SkipReason;
+      /** What is wrong, naming the option it is wrong with. */
+      readonly detail: string;
+      /** What to change in Word so that this question can be shuffled. */
+      readonly fix: string;
+    };
 
 /**
  * The ways a paper labels its four options. A paper picks one and uses it throughout, so
@@ -97,6 +104,79 @@ function missingSlot(found: readonly LabelHit[]): number | undefined {
     if (expected.every((letter, index) => letters[index] === letter)) return gap;
   }
   return undefined;
+}
+
+/**
+ * Word number formats that write an option name the way each label scheme does, narrowest
+ * first: a list in the *same case* as the typed labels before one that merely belongs to the
+ * same family.
+ *
+ * That order is what tells an option apart from a lettered statement list beside it. One
+ * paper writes its two situations as an `(a) (b)` list and its option (A) as an `(A)` list;
+ * the typed labels are `(B) (C) (D)`, so the upper-case list is the options and the lower
+ * case one is not.
+ */
+const FORMATS_OF_SCHEME: Record<LabelScheme, readonly (readonly string[])[]> = {
+  upperLetter: [['upperLetter'], ['upperLetter', 'lowerLetter']],
+  lowerLetter: [['lowerLetter'], ['upperLetter', 'lowerLetter']],
+  anyLetter: [['upperLetter', 'lowerLetter']],
+  digit: [['decimal']],
+  lowerRoman: [['lowerRoman'], ['lowerRoman', 'upperRoman']],
+  upperRoman: [['upperRoman'], ['lowerRoman', 'upperRoman']],
+};
+
+/** A numbering level that prints its number in brackets - `(%1)` - as an option list does. */
+const BRACKETED_LEVEL = /[([{]\s*%1\s*[)\]}]/;
+
+/**
+ * Lays typed labels and Word-lettered paragraphs out in document order and checks that they
+ * make exactly four options, each typed label at the position its letter names.
+ *
+ * A lettered paragraph sorts *before* any typed label inside it, because Word draws its
+ * number at the start of the line: `(A) 1 amp <tab> (B) 1.5 amp` is one paragraph holding
+ * option A, lettered by Word, followed by a typed option B.
+ *
+ * Returns the lettered paragraphs with the slot each one fills, or undefined when the two
+ * do not add up - which is the whole safeguard: anything that is not exactly four, in
+ * order, is left for the caller to report rather than read.
+ */
+function merged(
+  found: readonly LabelHit[],
+  candidates: readonly { paragraphIndex: number; bracketed: boolean }[],
+): LetteredOption[] | undefined {
+  if (found.length + candidates.length !== OPTION_LETTERS.length) return undefined;
+
+  const entries = [
+    ...found.map((hit) => ({ paragraphIndex: hit.paragraphIndex, start: hit.start, hit })),
+    ...candidates.map((candidate) => ({ paragraphIndex: candidate.paragraphIndex, start: -1, hit: undefined })),
+  ].sort((a, b) => a.paragraphIndex - b.paragraphIndex || a.start - b.start);
+
+  const lettered: LetteredOption[] = [];
+  for (const [slot, entry] of entries.entries()) {
+    if (entry.hit === undefined) lettered.push({ paragraphIndex: entry.paragraphIndex, slot });
+    else if (entry.hit.letter !== OPTION_LETTERS[slot]) return undefined;
+  }
+  return lettered;
+}
+
+/** True when the question holds a table that carries what look like option labels. */
+function optionsInsideTable(block: QuestionBlock): boolean {
+  return block.nodes
+    .filter((node) => node.namespaceURI === NS.w && node.localName === 'tbl')
+    .some((table) => /\(\s*([ABCDabcd]|[1-4]|i{1,3}|iv)\s*\)/.test(visibleText(table)));
+}
+
+function tableRefusal(): Extract<OptionParseResult, { ok: false }> {
+  return {
+    ok: false,
+    reason: 'options-inside-table',
+    detail:
+      'The option labels are inside a table. An option is moved by moving its text along the ' +
+      'line it sits on, and a table cell is not a line of text.',
+    fix:
+      'Select the table, then on the Layout tab choose Convert to Text, separating with tabs. ' +
+      'The options keep their columns on the page and can then be shuffled.',
+  };
 }
 
 /** A label written the way the page writes it - `(1)`, `B)`, `(iii)` - for messages. */
@@ -218,7 +298,19 @@ export class OptionBlockParser {
     );
 
     if (paragraphs.length === 0) {
-      return { ok: false, reason: 'options-not-found', detail: 'No paragraph follows the question stem.' };
+      // A question whose options are *entirely* inside a table has no option paragraphs at
+      // all, so the table has to be looked for here too - saying "nothing follows the stem"
+      // about a question with four visible options would send the author hunting for
+      // something that is plainly there.
+      if (optionsInsideTable(block)) return tableRefusal();
+      return {
+        ok: false,
+        reason: 'options-not-found',
+        detail: 'Nothing follows the question stem - this question has no option paragraphs at all.',
+        fix:
+          'Check the question in Word. Its options are probably attached to the question above ' +
+          'or below it, or were deleted; type them under this question, one label per option.',
+      };
     }
 
     const baseAtoms = buildParagraphAtoms(paragraphs);
@@ -227,61 +319,69 @@ export class OptionBlockParser {
       const found = findLabels(baseAtoms, pass);
       const sequence = found.map((hit) => hit.letter).join('');
 
-      if (sequence === 'ABCD') return this.build(paragraphs, found, undefined);
+      if (sequence === 'ABCD') return this.build(paragraphs, found, []);
 
-      // Three typed labels with one letter missing: the fourth option may be a paragraph
-      // Word letters by itself, which prints "(C)" without any "(C)" in the text.
-      const gap = missingSlot(found);
-      if (gap !== undefined) {
-        const paragraphIndex = this.letteredOptionFor(paragraphs, found, gap);
-        if (paragraphIndex !== undefined) return this.build(paragraphs, found, { paragraphIndex, slot: gap });
-      }
+      // Some labels typed, the rest produced by Word's own numbering - which prints "(C)"
+      // without any "(C)" in the text. The lettered paragraphs fill the slots the typed
+      // labels do not name.
+      const lettered = this.letteredOptionsFor(paragraphs, found, pass.scheme);
+      if (lettered !== undefined) return this.build(paragraphs, found, lettered);
     }
 
     return this.explainFailure(block, paragraphs, baseAtoms);
   }
 
   /**
-   * Finds the paragraph that holds the one option Word letters, when the other three are
-   * typed - the paper types `(A)`, `(B)`, `(D)` and lets Word produce the `(C)`.
+   * Finds the options Word letters by itself, when the rest are typed - a paper that types
+   * `(A)`, `(B)`, `(D)` and lets Word produce the `(C)`, or types only `(D)` and lets Word
+   * produce the first three.
    *
-   * It must be a lettered list with a single item (a four-item list would be the options
-   * themselves), and it must sit where the missing letter belongs: after the paragraph of
-   * the label before the gap and before the paragraph of the label after it. That position
-   * test is what distinguishes the missing option from a lettered list elsewhere in the
-   * question; when more than one paragraph still qualifies, nothing is assumed.
+   * The reading is a merge, not a search. Every option paragraph is either a typed label or
+   * an item of a lettered list; laying both out in document order has to produce exactly
+   * four options, with each typed label sitting at the position its own letter names. That
+   * is what tells the options apart from a lettered *statement* list inside the question: a
+   * question with three lettered statements and four typed labels merges to seven, and is
+   * refused rather than read.
+   *
+   * Only lists whose format matches the scheme being tried count - `(A)` labels against an
+   * upper or lower case letter list, `(4)` against a decimal one - so a roman item list is
+   * never folded into lettered options. When the merge does not come out at four, it is
+   * tried again with only the *bracketed* lists, since `(%1)` is how a paper writes an
+   * option and `%1.` is how it writes a statement.
    */
-  private letteredOptionFor(
+  private letteredOptionsFor(
     paragraphs: readonly Element[],
     found: readonly LabelHit[],
-    gap: number,
-  ): number | undefined {
-    if (!this.numbering) return undefined;
+    scheme: LabelScheme,
+  ): LetteredOption[] | undefined {
+    // With nothing typed there is no anchor: a lettered list on its own is the auto-lettered
+    // reader's business, and it checks things this merge cannot.
+    if (!this.numbering || found.length === 0 || found.length >= OPTION_LETTERS.length) return undefined;
+    // Out of order or repeated labels are a defect in the paper, not a gap to fill.
+    if (found.some((hit, i) => i > 0 && hit.letter <= found[i - 1]!.letter)) return undefined;
 
-    const counts = new Map<string, number>();
-    for (const paragraph of paragraphs) {
-      const numId = paragraphNumId(paragraph);
-      if (numId) counts.set(numId, (counts.get(numId) ?? 0) + 1);
-    }
-
-    // `found` is in document order and misses exactly the slot `gap`.
-    const before = gap > 0 ? found[gap - 1]!.paragraphIndex : -1;
-    const after = gap < found.length ? found[gap]!.paragraphIndex : paragraphs.length;
-
-    const candidates: { index: number; bracketed: boolean }[] = [];
+    const candidates: { paragraphIndex: number; bracketed: boolean; format: string }[] = [];
     paragraphs.forEach((paragraph, index) => {
-      if (index < before || index > after) return;
       const numId = paragraphNumId(paragraph);
-      if (!numId || counts.get(numId) !== 1) return;
-      const definition = this.numbering!.get(numId);
-      if (!definition || !['upperLetter', 'lowerLetter'].includes(definition.format)) return;
-      candidates.push({ index, bracketed: /[([{]\s*%1\s*[)\]}]/.test(definition.levelText) });
+      const definition = numId ? this.numbering!.get(numId) : undefined;
+      if (!definition) return;
+      candidates.push({
+        paragraphIndex: index,
+        bracketed: BRACKETED_LEVEL.test(definition.levelText),
+        format: definition.format,
+      });
     });
 
-    if (candidates.length === 0) return undefined;
-    const bracketed = candidates.filter((candidate) => candidate.bracketed);
-    const narrowed = bracketed.length > 0 ? bracketed : candidates;
-    return narrowed.length === 1 ? narrowed[0]!.index : undefined;
+    // Narrowest reading first, and the first one that accounts for exactly four options
+    // wins. Anything wider is only tried because the narrower one found nothing at all, so
+    // a list that fits is never passed over for one that merely could.
+    for (const formats of FORMATS_OF_SCHEME[scheme]) {
+      const family = candidates.filter((candidate) => formats.includes(candidate.format));
+      const bracketed = family.filter((candidate) => candidate.bracketed);
+      const answer = merged(found, bracketed) ?? merged(found, family);
+      if (answer !== undefined) return answer;
+    }
+    return undefined;
   }
 
   /**
@@ -293,19 +393,22 @@ export class OptionBlockParser {
    */
   private notesFor(
     found: readonly LabelHit[],
-    lettered: LetteredOption | undefined,
+    lettered: readonly LetteredOption[],
     anchoredPictures: number,
   ): OptionLayoutNote[] {
     const notes: OptionLayoutNote[] = [];
     const shown = (hit: LabelHit): string => labelAsTyped(hit);
 
-    if (lettered !== undefined) {
-      const position = ['first', 'second', 'third', 'fourth'][lettered.slot] ?? 'first';
+    if (lettered.length > 0) {
+      const positions = lettered
+        .map((option) => ['first', 'second', 'third', 'fourth'][option.slot] ?? 'first')
+        .join(', ');
+      const many = lettered.length > 1;
       notes.push({
         issue: 'mixed-auto-and-typed-labels',
         detail:
-          `The ${position} option is lettered by Word, but ${found.map(shown).join(', ')} ` +
-          'are typed into the text.',
+          `The ${positions} option${many ? 's are' : ' is'} lettered by Word, but ` +
+          `${found.map(shown).join(', ')} ${found.length > 1 ? 'are' : 'is'} typed into the text.`,
         fix: 'Letter all four options the same way: either let Word letter all four, or type all four labels.',
       });
     }
@@ -351,7 +454,7 @@ export class OptionBlockParser {
   private build(
     paragraphs: readonly Element[],
     found: readonly LabelHit[],
-    lettered: LetteredOption | undefined,
+    lettered: readonly LetteredOption[],
   ): OptionParseResult {
     // Cut atoms so that every label starts and ends on an atom boundary.
     const paragraphAtoms = buildParagraphAtoms(paragraphs).map((entry, paragraphIndex) => {
@@ -364,7 +467,14 @@ export class OptionBlockParser {
     const flat: Atom[] = paragraphAtoms.flatMap((entry) => entry.atoms);
     const located = found.map((hit) => locateLabel(paragraphAtoms, hit));
     if (located.some((range) => range === undefined)) {
-      return { ok: false, reason: 'unexpected-label-sequence', detail: 'Could not align option labels with runs.' };
+      return {
+        ok: false,
+        reason: 'unexpected-label-sequence',
+        detail: 'The option labels were found, but could not be matched up with the text around them.',
+        fix:
+          'Retype the option labels of this question: delete each "(A)" to "(D)" and type it ' +
+          'again, pressing Tab after each one.',
+      };
     }
     const labelRanges = (located as { from: number; to: number }[]).map((range, i) => ({
       ...range,
@@ -381,17 +491,19 @@ export class OptionBlockParser {
     };
 
     // A Word-lettered option has no label atoms of its own; its content starts at its
-    // paragraph. It is spliced in at the slot whose letter was missing from the text.
-    if (lettered !== undefined) {
-      const start = firstAtomIndexOf(paragraphAtoms, lettered.paragraphIndex);
+    // paragraph. Each is spliced in at the slot whose letter was missing from the text -
+    // in ascending slot order, so every splice lands at an index the earlier ones settled.
+    for (const option of [...lettered].sort((a, b) => a.slot - b.slot)) {
+      const start = firstAtomIndexOf(paragraphAtoms, option.paragraphIndex);
       if (start === undefined) {
         return {
           ok: false,
           reason: 'options-not-found',
-          detail: `Option ${shownLabel(lettered.slot)} has no content.`,
+          detail: `Option ${shownLabel(option.slot)} is lettered by Word but its line is empty.`,
+          fix: `Type the answer for option ${shownLabel(option.slot)} on that line, or delete the empty line.`,
         };
       }
-      labelRanges.splice(lettered.slot, 0, { from: start, to: start, bracketed: true });
+      labelRanges.splice(option.slot, 0, { from: start, to: start, bracketed: true });
     }
 
     const symbolLabel = symbolBeforeLabel(flat, labelRanges);
@@ -400,10 +512,12 @@ export class OptionBlockParser {
         ok: false,
         reason: 'label-bracket-is-a-symbol',
         detail:
-          `Option label ${shownLabel(OPTION_LETTERS.indexOf(symbolLabel))} follows a character from a ` +
-          'picture font such as Wingdings, which is what an opening bracket looks like when it is picked ' +
-          'from one of those fonts in Insert > Symbol. Such a character holds no text, so where the ' +
-          'option before it ends cannot be established.',
+          `The opening bracket of option ${shownLabel(OPTION_LETTERS.indexOf(symbolLabel))} came from a ` +
+          'picture font such as Wingdings. Those fonts hold drawings rather than letters, so that ' +
+          'bracket says nothing about what it is, and where the option before it ends cannot be told.',
+        fix:
+          `Delete the label ${shownLabel(OPTION_LETTERS.indexOf(symbolLabel))} and type it again with ` +
+          'the keyboard. (A bracket from the ordinary Symbol font is read correctly and needs no change.)',
       };
     }
 
@@ -453,18 +567,28 @@ export class OptionBlockParser {
           ok: false,
           reason: floating ? 'option-contains-floating-graphic' : 'options-not-found',
           detail: floating
-            ? `Option ${shownLabel(i)} has no text of its own, and this question's options are ` +
-              'floating pictures - so which picture belongs to which option cannot be established. ' +
-              'Select each option picture in Word and set Layout Options to "In line with text"; ' +
-              'the options can then be shuffled.'
-            : `Option ${shownLabel(i)} has no content.`,
+            ? `Option ${shownLabel(i)} has no text of its own: this question's answers are ` +
+              'pictures, and each one is a floating picture placed from the page rather than ' +
+              'from the line it belongs to. Which picture is which option cannot be told.'
+            : `Option ${shownLabel(i)} has a label but nothing after it.`,
+          fix: floating
+            ? 'Click each option picture in turn, open Layout Options and choose "In line with ' +
+              'text", so that each picture sits on the line of the option it belongs to.'
+            : `Type the answer for option ${shownLabel(i)} after its label.`,
         };
       }
       if (coreAtoms.some((atom) => atom.paragraphIndex !== paragraphIndex)) {
         return {
           ok: false,
           reason: 'option-spans-paragraphs',
-          detail: `Option ${shownLabel(i)} continues on another paragraph.`,
+          detail:
+            `Option ${shownLabel(i)} runs on to a paragraph of its own, because Enter was pressed ` +
+            'inside it. An option moves by having its text put on another label\'s line, and text ' +
+            'in a paragraph of its own has no line to move to.',
+          fix:
+            'Put the cursor at the start of the continuation line and press Backspace to join it ' +
+            'up. If the option is meant to print on two lines, press Shift+Enter there instead of ' +
+            'Enter: it looks exactly the same and keeps the option in one paragraph.',
         };
       }
       // Only a picture wedged *between* words of the answer is fatal: the words would move
@@ -474,8 +598,11 @@ export class OptionBlockParser {
           ok: false,
           reason: 'option-contains-floating-graphic',
           detail:
-            `Option ${shownLabel(i)} has a floating picture in the middle of its answer, so the ` +
-            'words and the picture cannot be moved together.',
+            `Option ${shownLabel(i)} has a floating picture in the middle of its words. A floating ` +
+            'picture is placed from the page, so it would stay behind while the words moved.',
+          fix:
+            'Click that picture, open Layout Options and choose "In line with text". It then sits ' +
+            'in the line like a letter does, and travels with its option.',
         };
       }
 
@@ -510,16 +637,17 @@ export class OptionBlockParser {
       .reduce((a, b) => (b.length > a.length ? b : a), [] as LabelHit[]);
 
     if (best.length === 0) {
-      const tableHasLabels = block.nodes
-        .filter((node) => node.namespaceURI === NS.w && node.localName === 'tbl')
-        .some((table) => /\(\s*([ABCDabcd]|[1-4]|i{1,3}|iv)\s*\)/.test(visibleText(table)));
-      if (tableHasLabels) {
-        return { ok: false, reason: 'options-inside-table', detail: 'Option labels were found inside a table.' };
-      }
+      if (optionsInsideTable(block)) return tableRefusal();
       return {
         ok: false,
         reason: 'options-not-found',
-        detail: 'No "(A)...(D)" labels found; the options are probably auto-lettered by Word.',
+        detail:
+          'No option labels were found under this question - neither typed "(A)" to "(D)" nor a ' +
+          'lettered list of four made by Word.',
+        fix:
+          'Check that this question has four options and that each one starts with its label. ' +
+          'The surest way is to select the four options and letter them with the numbering ' +
+          'button in Word, picking the "(A) (B) (C) (D)" style.',
       };
     }
 
@@ -533,10 +661,9 @@ export class OptionBlockParser {
       // Accepting the space runs has to account for all four options, or the separator is
       // not the whole story: one letter may be left to a paragraph Word letters itself, but
       // an unexplained gap means something else is wrong and gets its own message below.
-      const gap = missingSlot(combined);
       const complete =
         letters === OPTION_LETTERS.join('') ||
-        (gap !== undefined && this.letteredOptionFor(paragraphs, combined, gap) !== undefined);
+        this.letteredOptionsFor(paragraphs, combined, best[0]!.scheme) !== undefined;
       if (complete) {
         const many = afterSpaces.length > 1;
         return {
@@ -544,10 +671,12 @@ export class OptionBlockParser {
           reason: 'label-after-spaces-not-tab',
           detail:
             `Option label${many ? 's' : ''} ${afterSpaces.map(labelAsTyped).join(', ')} ` +
-            `${many ? 'are' : 'is'} separated from the option before ${many ? 'them' : 'it'} by a ` +
-            'run of spaces instead of a tab, so where that option ends cannot be established. ' +
-            `In Word, delete the spaces in front of ${many ? 'each of these labels' : 'this label'} ` +
-            'and press Tab instead.',
+            `${many ? 'are' : 'is'} pushed across the page with a run of spaces instead of a tab. ` +
+            'A run of spaces looks exactly like ordinary text, so where the option before ' +
+            `${many ? 'each of them' : 'it'} ends cannot be told.`,
+          fix:
+            `Delete the spaces in front of ${many ? 'each of these labels' : 'this label'} and ` +
+            'press Tab instead.',
         };
       }
     }
@@ -561,16 +690,31 @@ export class OptionBlockParser {
         ok: false,
         reason: 'option-contains-floating-graphic',
         detail:
-          `Labels read as "${sequence}" because a floating picture sits in the option area; ` +
-          'its text cannot be told apart from the option labels.',
+          `Only ${sequence.length === 0 ? 'no labels' : `"${sequence}"`} could be read here, because a ` +
+          'floating picture sits among the options and the words inside it cannot be told apart ' +
+          'from the option labels.',
+        fix:
+          'Click the picture, open Layout Options and choose "In line with text"; or, if it is a ' +
+          'diagram belonging to the question rather than to an option, move it above the options.',
       };
     }
 
-    const expected = SCHEME_TOKENS[best[0]!.scheme].slice(0, 4).join(',');
+    const tokens = SCHEME_TOKENS[best[0]!.scheme].slice(0, 4);
+    const expected = tokens.map((token) => `(${token})`).join(' ');
+    const missing = tokens.filter((token) => !sequence.includes(token));
     return {
       ok: false,
       reason: 'unexpected-label-sequence',
-      detail: `Expected labels ${expected} but found "${sequence}".`,
+      detail:
+        `This question should carry the labels ${expected}, but reading it gives "${sequence}"` +
+        `${missing.length > 0 ? ` - ${missing.map((token) => `(${token})`).join(' and ')} could not be found` : ''}` +
+        '. Either a label is missing or mistyped, or a label that is there belongs to something ' +
+        'else in the question.',
+      fix:
+        `Check that this question has exactly four options labelled ${expected}, each label used ` +
+        'once, each at the start of its line or straight after a Tab. If the question also lists ' +
+        'statements for the reader to consider, give that list a different style from the answer ' +
+        'options, so that the two cannot be confused.',
     };
   }
 }

@@ -32,17 +32,29 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
       return {
         ok: false,
         reason: 'options-not-found',
-        detail: 'No "(A)...(D)" labels and no auto-lettered option list either.',
+        detail:
+          'No option labels were found under this question - neither typed "(A)" to "(D)" nor a ' +
+          'lettered list made by Word.',
+        fix:
+          'Check that this question has four options and that each one starts with its label. ' +
+          'The surest way is to select the four options and letter them with the numbering ' +
+          'button in Word, picking the "(A) (B) (C) (D)" style.',
       };
     }
 
     const rightSize = lists.filter((list) => list.paragraphs.length === OPTION_COUNT);
     if (rightSize.length === 0) {
-      const sizes = lists.map((list) => `numId ${list.numId} has ${list.paragraphs.length}`).join(', ');
+      const sizes = lists.map((list) => list.paragraphs.length).join(' and ');
       return {
         ok: false,
         reason: 'unexpected-option-count',
-        detail: `An auto-lettered list was found but not with four items (${sizes}).`,
+        detail:
+          `This question's options are lettered by Word, but the list has ${sizes} items rather ` +
+          'than four. Every question must offer exactly four options for the answer key to keep ' +
+          'meaning what it says.',
+        fix:
+          'Count the options in Word. If one is missing, type it; if an extra line was swept into ' +
+          'the list by mistake, select it and turn the lettering off for that line.',
       };
     }
 
@@ -69,8 +81,12 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
         ok: false,
         reason: 'ambiguous-option-list',
         detail:
-          `More than one four-item lettered list could be the options ` +
-          `(numId ${candidates.map((list) => list.numId).join(', ')}).`,
+          `This question has ${candidates.length} lettered lists of four, written the same way, so ` +
+          'which of them is the answer options cannot be told - the other is presumably a list of ' +
+          'statements the question asks about.',
+        fix:
+          'Letter only the answer options with a bracketed "(A) (B) (C) (D)" list. Give the other ' +
+          'list a different style - "A." or "(i) (ii) (iii) (iv)" - so the two cannot be confused.',
       };
     }
 
@@ -91,11 +107,14 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
           ok: false,
           reason: floating ? 'option-contains-floating-graphic' : 'options-not-found',
           detail: floating
-            ? `Auto-lettered option ${i + 1} has no text of its own, and this question's options ` +
-              'are floating pictures - so which picture belongs to which option cannot be ' +
-              'established. Select each option picture in Word and set Layout Options to ' +
-              '"In line with text"; the options can then be shuffled.'
-            : `Auto-lettered option ${i + 1} is empty.`,
+            ? `Option ${'ABCD'[i] ?? i + 1} has no text of its own: this question's answers are ` +
+              'pictures, and each one is a floating picture placed from the page rather than ' +
+              'from the line it belongs to. Which picture is which option cannot be told.'
+            : `Option ${'ABCD'[i] ?? i + 1} is lettered by Word but its line is empty.`,
+          fix: floating
+            ? 'Click each option picture in turn, open Layout Options and choose "In line with ' +
+              'text", so that each picture sits on the line of the option it belongs to.'
+            : `Type the answer for option ${'ABCD'[i] ?? i + 1} on that line, or delete the empty line.`,
         };
       }
       // Only a picture wedged between the words of one answer is fatal: the words would
@@ -105,8 +124,11 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
           ok: false,
           reason: 'option-contains-floating-graphic',
           detail:
-            `Auto-lettered option ${i + 1} has a floating picture in the middle of its answer, ` +
-            'so the words and the picture cannot be moved together.',
+            `Option ${'ABCD'[i] ?? i + 1} has a floating picture in the middle of its words. A ` +
+            'floating picture is placed from the page, so it would stay behind while the words moved.',
+          fix:
+            'Click that picture, open Layout Options and choose "In line with text". It then sits ' +
+            'in the line like a letter does, and travels with its option.',
         };
       }
     }

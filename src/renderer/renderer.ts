@@ -92,6 +92,17 @@ function currentRequest(): GenerationRequest {
   };
 }
 
+/**
+ * Empties both exclusion lists. Returns whether either of them actually held anything, so
+ * the user is only told about it when something was thrown away.
+ */
+function clearExclusions(): boolean {
+  const had = questionExclusions.value.trim() !== '' || optionExclusions.value.trim() !== '';
+  questionExclusions.value = '';
+  optionExclusions.value = '';
+  return had;
+}
+
 /** Merges question numbers into an exclusion field without losing what is already there. */
 function addToField(field: HTMLInputElement, numbers: readonly number[]): void {
   const merged = [...new Set([...parseNumbers(field.value), ...numbers])].sort((a, b) => a - b);
@@ -105,11 +116,11 @@ function renderSummary(paper: PaperSummary): void {
   summaryPanel.replaceChildren(
     element('p', 'hint', `${paper.questionCount} questions found.`),
     table(
-      ['Subject', 'Questions', 'Numbers'],
-      paper.subjects.map((subject) => [
-        subject.subject,
-        String(subject.questionCount),
-        `${subject.firstQuestionNumber}–${subject.lastQuestionNumber}`,
+      ['Section', 'Questions', 'Numbers'],
+      paper.groups.map((group) => [
+        group.group,
+        String(group.questionCount),
+        `${group.firstQuestionNumber}–${group.lastQuestionNumber}`,
       ]),
     ),
     element(
@@ -189,18 +200,40 @@ function renderDryRun(report: DryRunReport): void {
     questions,
     ` of ${report.paper.questionCount} questions are free to move and options would be shuffled for `,
     options,
-    ` questions, in each of the ${report.setCount} set(s).`,
+    ` of ${report.paper.questionCount}, in each of the ${report.setCount} set(s).`,
   );
   dryRunPanel.append(headline);
 
+  // Immediately under the headline, because the headline invites the question "and the
+  // rest?". Every question of the paper is in exactly one of these counts, so the two lines
+  // add up and nothing is left unexplained.
+  const sums = element('p', 'hint');
+  sums.append(
+    element('span', '', `Questions: ${report.questionAccounting.summary ?? 'not being shuffled.'}`),
+    element('br', ''),
+    element('span', '', `Options: ${report.optionAccounting.summary ?? 'not being shuffled.'}`),
+  );
+  dryRunPanel.append(sums);
+  // The numbers behind "you asked to keep", so a list left over from another paper is
+  // visible here rather than only in the input box the user has scrolled past.
+  for (const kept of [
+    { numbers: report.questionAccounting.keptByUser, what: 'in place' },
+    { numbers: report.optionAccounting.keptByUser, what: 'in order' },
+  ]) {
+    if (kept.numbers.length === 0) continue;
+    dryRunPanel.append(
+      element('p', 'hint', `You asked to keep ${kept.what}: ${kept.numbers.join(', ')}`),
+    );
+  }
+
   dryRunPanel.append(
     table(
-      ['Subject', 'Questions', 'Free to move', 'Options shuffled'],
-      report.subjects.map((subject) => [
-        subject.subject,
-        String(subject.questionCount),
-        String(subject.movable),
-        String(subject.optionsShuffled),
+      ['Section', 'Questions', 'Free to move', 'Options shuffled'],
+      report.groups.map((group) => [
+        group.group,
+        String(group.questionCount),
+        String(group.movable),
+        String(group.optionsShuffled),
       ]),
     ),
   );
@@ -220,11 +253,35 @@ function renderDryRun(report: DryRunReport): void {
         'set and their answer never changes. Each one below says what stopped it and what to ' +
         'change in Word; see also "How to write the Word document" at the top of this window.',
     );
+    // Grouped by problem, with the fix stated once: a paper typed one way goes wrong the
+    // same way many times over, and 24 copies of one paragraph bury the odd one out.
     const list = document.createElement('ul');
-    for (const item of report.optionsKeptByTool) {
-      list.append(element('li', '', `Q${item.questionNumber} (${item.subject}) — ${item.detail}`));
+    list.className = 'notes-list';
+    for (const group of report.paper.unshufflableGroups) {
+      const entry = document.createElement('li');
+      entry.append(
+        element('strong', '', `${group.label} — ${group.questionNumbers.length} question(s)`),
+      );
+      // When every question in the group says the same thing, say it once and just list
+      // the numbers; otherwise each question gets its own line.
+      if (group.sharedDetail) {
+        entry.append(
+          element('div', '', group.sharedDetail),
+          element('div', '', `Questions: ${group.questionNumbers.join(', ')}`),
+        );
+      } else {
+        const questions = document.createElement('ul');
+        for (const item of group.questions) {
+          questions.append(
+            element('li', '', `Q${item.questionNumber} (${item.subject}) — ${item.detail}`),
+          );
+        }
+        entry.append(questions);
+      }
+      entry.append(element('div', 'hint', `Fix: ${group.fix}`));
+      list.append(entry);
     }
-    if (report.optionsKeptByTool.length > 0) details.append(list);
+    if (report.paper.unshufflableGroups.length > 0) details.append(list);
   }
 
   // 2. Read, but worth tidying.
@@ -246,12 +303,12 @@ function renderDryRun(report: DryRunReport): void {
     }
     if (report.suggestedForExclusion.length > 0) details.append(list);
 
-    if (report.optionsKeptByUser.length > 0) {
+    if (report.optionAccounting.keptByUser.length > 0) {
       details.append(
         element(
           'p',
           'hint',
-          `Already kept because you asked: ${report.optionsKeptByUser.join(', ')}`,
+          `Already kept because you asked: ${report.optionAccounting.keptByUser.join(', ')}`,
         ),
       );
     }
@@ -413,6 +470,10 @@ function renderResults(result: GenerationResult): void {
 browseButton.addEventListener('click', async () => {
   const file = await api.pickSourceFile();
   if (!file) return;
+  // A question number only means something in the paper it was read from, so both exclusion
+  // lists are emptied when a different paper is chosen. Carrying them over silently keeps
+  // questions in place for reasons that belong to a paper that is no longer loaded.
+  const cleared = file !== sourceFileInput.value ? clearExclusions() : false;
   sourceFileInput.value = file;
   summaryPanel.hidden = true;
   dryRunPanel.hidden = true;
@@ -427,7 +488,12 @@ browseButton.addEventListener('click', async () => {
     return;
   }
   renderSummary(result.value);
-  setStatus('');
+  setStatus(
+    cleared
+      ? 'New paper loaded — the two "keep" lists were emptied, because those question ' +
+        'numbers belonged to the previous paper.'
+      : '',
+  );
 });
 
 for (const input of [shuffleQuestions, shuffleOptions]) {

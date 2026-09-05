@@ -222,7 +222,7 @@ describe('auto-lettered options', () => {
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
     expect(parsed.reason).toBe('option-contains-floating-graphic');
-    expect(parsed.detail).toMatch(/In line with text/);
+    expect(parsed.fix).toMatch(/In line with text/);
   });
 
   /**

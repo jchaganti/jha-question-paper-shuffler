@@ -170,7 +170,10 @@ describe('material trailing the option list', () => {
     const paragraphs = block.nodes
       .filter((node) => node !== block.questionParagraph && node.localName === 'p')
       .map((node) => visibleText(node).replace(/\s+/g, ' ').trim());
-    expect(paragraphs).toEqual(['(A) 0', '(B) 4A', '(C) 1A', '(D) 3A', '', '', 'SECTION B (Attempt any 10 questions)']);
+    // The spacers and the "SECTION B" instruction are no longer part of this question at
+    // all: the instruction opens the next section, so they belong to that section's header
+    // and cannot travel with a question even in principle. See `sectionDividers.test.ts`.
+    expect(paragraphs).toEqual(['(A) 0', '(B) 4A', '(C) 1A', '(D) 3A']);
   });
 
   it('still refuses an option that genuinely runs on to the next paragraph', async () => {
@@ -203,6 +206,7 @@ describe('a picture wedged between the words of one answer', () => {
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
     expect(parsed.reason).toBe('option-contains-floating-graphic');
-    expect(parsed.detail).toMatch(/in the middle of its answer/);
+    expect(parsed.detail).toMatch(/in the middle of its words/);
+    expect(parsed.fix).toMatch(/In line with text/);
   });
 });

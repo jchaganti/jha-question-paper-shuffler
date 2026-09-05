@@ -80,8 +80,8 @@ describe('OptionBlockParser', () => {
     if (parsed.ok) return;
     expect(parsed.reason).toBe('option-contains-floating-graphic');
     expect(parsed.detail).toMatch(/Option \(D\) has no text of its own/);
-    expect(parsed.detail).toMatch(/options are floating pictures/);
-    expect(parsed.detail).toMatch(/In line with text/);
+    expect(parsed.detail).toMatch(/floating picture placed from the page/);
+    expect(parsed.fix).toMatch(/In line with text/);
   });
 
   it('does not treat "(A)" inside option text as a label', async () => {

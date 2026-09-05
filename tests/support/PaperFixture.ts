@@ -46,8 +46,19 @@ export interface FixtureQuestion {
    * typed labels - the "(A), (B), (D) typed and Word letters the (C)" shape.
    */
   readonly letteredOptionIndex?: number;
+  /**
+   * Emit the first N option paragraphs as auto-lettered list items and the rest as typed
+   * labels - the "Word letters (A) (B) (C), the author typed the (D)" shape.
+   */
+  readonly autoLetteredFirst?: number;
   /** Raw XML injected as an extra option paragraph (e.g. an OLE object or picture). */
   readonly rawOptionParagraph?: string;
+  /**
+   * Plain paragraphs emitted immediately before this question, with a blank line either
+   * side - how a paper writes "SECTION B (Attempt any 10 questions)" mid-subject. Separate
+   * two headings with a newline to get the "BIOLOGY PART 1" above "SECTION - A" shape.
+   */
+  readonly headingBefore?: string;
 }
 
 /** Auto-lettered list ids emitted by the fixture. */
@@ -58,6 +69,8 @@ export const LIST = {
   plainStatements: '91',
   /** upperLetter, "(%1)" - a second option-shaped list, to test ambiguity. */
   secondBracketed: '92',
+  /** lowerLetter, "(%1)" - how a paper letters a list of *situations* beside its options. */
+  lowerStatements: '93',
 } as const;
 
 export interface FixtureSection {
@@ -72,13 +85,15 @@ const escape = (text: string): string =>
 
 /**
  * Text runs, with `[[float:caption]]` expanded into a floating picture anchored at that
- * point - the way a diagram sits among the options in a real paper.
+ * point - the way a diagram sits among the options in a real paper - and `[[br]]` into a
+ * line break, which is what Shift+Enter puts inside an option.
  */
 const textRuns = (part: string): string =>
   part
-    .split(/(\[\[(?:float|image):[^\]]*\]\])/)
+    .split(/(\[\[(?:float|image):[^\]]*\]\]|\[\[br\]\])/)
     .filter((piece) => piece !== '')
     .map((piece) => {
+      if (piece === '[[br]]') return '<w:r><w:br/></w:r>';
       const float = /^\[\[float:([^\]]*)\]\]$/.exec(piece);
       if (float) return floatingPictureRun(float[1]!);
       const inline = /^\[\[image:([^\]]*)\]\]$/.exec(piece);
@@ -283,6 +298,9 @@ export function buildDocumentXml(
     body.push(plainParagraph(section.subject));
     body.push('<w:p/>');
     section.questions.forEach((question, index) => {
+      if (question.headingBefore) {
+        body.push('<w:p/>', ...question.headingBefore.split('\n').map(plainParagraph), '<w:p/>');
+      }
       body.push(paragraph(question.stem, section.numId));
       for (const extra of question.secondLetteredList ?? []) {
         body.push(paragraph(extra, question.secondLetteredListId ?? LIST.secondBracketed));
@@ -295,7 +313,11 @@ export function buildDocumentXml(
             : undefined;
       question.optionParagraphs.forEach((optionParagraph, position) => {
         const lettered =
-          question.letteredOptionIndex !== undefined
+          question.autoLetteredFirst !== undefined
+            ? position < question.autoLetteredFirst
+              ? LIST.bracketedOptions
+              : undefined
+            : question.letteredOptionIndex !== undefined
             ? position === question.letteredOptionIndex
               ? LIST.bracketedOptions
               : undefined
@@ -338,16 +360,17 @@ function buildNumberingXml(sections: readonly FixtureSection[]): string {
 
   // Auto-lettered lists: options "(A)", lettered statements "A.", and a second
   // option-shaped list used to test that ambiguity is refused rather than guessed.
-  const letterList = (id: string, text: string): void => {
+  const letterList = (id: string, text: string, format = 'upperLetter'): void => {
     abstracts.push(
       `<w:abstractNum w:abstractNumId="${id}"><w:lvl w:ilvl="0"><w:start w:val="1"/>` +
-        `<w:numFmt w:val="upperLetter"/><w:lvlText w:val="${text}"/></w:lvl></w:abstractNum>`,
+        `<w:numFmt w:val="${format}"/><w:lvlText w:val="${text}"/></w:lvl></w:abstractNum>`,
     );
     nums.push(`<w:num w:numId="${id}"><w:abstractNumId w:val="${id}"/></w:num>`);
   };
   letterList(LIST.bracketedOptions, '(%1)');
   letterList(LIST.plainStatements, '%1.');
   letterList(LIST.secondBracketed, '(%1)');
+  letterList(LIST.lowerStatements, '(%1)', 'lowerLetter');
 
   return `${PROLOG}<w:numbering ${NAMESPACES}>${abstracts.join('')}${nums.join('')}</w:numbering>`;
 }

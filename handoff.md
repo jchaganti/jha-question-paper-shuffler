@@ -10,7 +10,8 @@ far and the exact next steps. Read this plus `README.md` before changing anythin
 An **Electron + TypeScript desktop app** that takes one NEET-style Word question paper
 (`.docx`) and produces *N* shuffled sets, each with its own correct answer key.
 
-- Questions are re-ordered **only within their own subject**.
+- Questions are re-ordered **only within their own section** - a subject, or a `SECTION A` /
+  `SECTION B` division of one (item 28).
 - Option labels `(A)`–`(D)` stay put; only the option *contents* move between them.
 - The answer key is **edited in place** — only the letter inside each existing cell is
   rewritten, so the table keeps its geometry, borders, spans and fonts.
@@ -60,11 +61,12 @@ exact box/label to fix, an entry in the in-app **best practices** list
 ```bash
 npm run build        # tsc main (CommonJS) + renderer (ESM) + copy static assets
 npm start            # build, then launch Electron
-npx vitest run       # 288 tests, 22 files
+npx vitest run       # 326 tests, 26 files
 npm run portable     # release/Question Paper Shuffler <v> (portable).zip - shareable, no archiver needed
 npm run dist         # release/... Setup <v>.exe - needs a 7za the machine will run, see item 26
 npm run cli -- --file "paper.docx" --shuffle-questions --shuffle-options --dry-run
 npm run regress      # every paper in C:\ps\q-paper; add -- --generate to also verify sets
+npm run audit        # every dry-run report in the corpus, checked against itself
 node scripts/ui-harness.mjs   # dist/web/renderer/harness.html — real UI, stubbed backend
 ```
 
@@ -82,11 +84,11 @@ DocxPackage        unzip; hand out word/document.xml + numbering.xml as XmlParts
       ↓
 NumberingIndex     numId -> {format, start, levelText}
       ↓
-PaperParser        body nodes -> subjects -> QuestionBlocks (+ AnswerKeyTable)
+PaperParser        body nodes -> subjects -> sections -> QuestionBlocks (+ AnswerKeyTable)
       ↓
 OptionSetParser    per question: typed-label reader, else auto-lettered reader
       ↓
-ShufflePlanner     seeded permutations (questions within subject; options within question)
+ShufflePlanner     seeded permutations (questions within section; options within question)
       ↓
 SetBuilder         re-order blocks, apply option permutations, rewrite key, page flow
       ↓
@@ -130,6 +132,9 @@ SetVerifier        re-open the written file and prove four properties
 - **`OptionSlot`** — `labelAtoms` / `leadAtoms` / `coreAtoms` / `padAtoms`. **Only
   `coreAtoms` move.** Label, the tabs after it, and the trailing padding belong to the
   *position*, which is what keeps columns aligned and separators in place.
+- **`PaperSection`** — the unit a question may move within: a subject, or one `SECTION`/
+  `PART` division of one. `subject` + `group` + `label`; `headingNode` only on the division
+  that opens its subject, since that is what drives the page break.
 - **`QuestionBlock`** — a slice of body nodes, plus `printedNumber` (taken from the key).
 
 ### Constraints that bite
@@ -616,6 +621,165 @@ Commits, oldest first:
     directory, dry-runs each paper and prints shuffled counts and refusal reasons, with
     `--generate` to write two sets each and verify them.
 
+28. **Questions shuffle within a *section*, not within a subject.**
+    `PaperParser.splitIntoGroups`, `PaperModel.PaperSection.group` / `.label`.
+
+    Papers divide a subject into `SECTION A (All questions are compulsory)` and
+    `SECTION B (Attempt any 10 questions)`, and Biology often adds `PART 1` / `PART 2` above
+    those. Those divisions are rules, not decoration: a compulsory question shuffled into
+    the attempt-any-10 section changes what the candidate is asked to do. The tool was
+    shuffling across them.
+
+    A second defect fell out of the same cause. A question block runs from one numbered
+    paragraph to the next, so the `SECTION B` heading was *inside the last question of
+    section A* and travelled with it when that question moved. It also read as a
+    continuation of that question's last option - which is why MTP-2-XI-2023 went from 191
+    to **193** options shuffled when this landed: Q35 and Q85 stopped being refused with
+    `option-spans-paragraphs`.
+
+    `PaperSection` is now the *division*, not the subject, and carries `subject`, `group`
+    (`PART 2 SECTION A`) and `label` (`BIOLOGY - PART 2 SECTION A`). The planner, builder
+    and verifier needed no change: they were already generic over sections. `headingNode` -
+    which drives "each subject starts a new page" - is set only on the division that opens
+    its subject, so `SECTION B` does not gain a page break.
+
+    A heading with no questions under it (`BIOLOGY PART 1` sitting directly above
+    `SECTION - A`) does **not** open a run of its own; it joins the heading below it. So
+    Biology comes out as four runs, not six with two empties.
+
+    The summary types were renamed with it: `SubjectSummary`/`DryRunSubject` are now
+    `GroupSummary`/`DryRunGroup` with a `group` field, and `PaperSummary.subjects` /
+    `DryRunReport.subjects` are `.groups`. "Subject" had stopped being true - one subject
+    contributes four of these.
+
+    Corpus: three papers are divided this way. MTP-2-XI-2023 (8 sections), FST-1-Rep-2024
+    (4 subjects x 2), Extra MTP-1 (2, with no subject heading at all - labelled plain
+    `SECTION A` / `SECTION B`, since `ALL` is a stand-in rather than a name). Every paper
+    still verifies, and a generated set re-parses into exactly the same eight sections.
+
+29. **Any mixture of Word-lettered and typed option labels is read.**
+    `OptionBlockParser.letteredOptionsFor` + the `merged` helper.
+
+    The old reader handled two shapes: all four lettered by Word (the auto-lettered reader),
+    or exactly *one* lettered among three typed. Real papers do neither in several places -
+    `(A) (B) (C)` lettered with the `(D)` typed (4 questions), two and two (1), and one
+    lettered `(A)` sharing a line with a typed `(B)`.
+
+    Reading is now a **merge, not a search**: typed labels and lettered paragraphs are laid
+    out in document order and must come to exactly four, each typed label at the position its
+    own letter names. That single rule replaces the old per-gap search and covers every
+    mixture. It is also the safeguard - three lettered statements plus three typed labels
+    merge to six, and are refused.
+
+    Two things were learned the hard way, both now pinned by tests:
+    - **A paragraph can be two options.** `(A) 1 amp <tab> (B) 1.5 amp` is one paragraph that
+      is a list item *and* carries a typed label. An early version excluded such paragraphs
+      as candidates and cost *Alternating Current* 76 questions. A lettered entry sorts
+      before any typed label in the same paragraph, because Word draws its number at the
+      start of the line.
+    - **Narrow before wide.** Q99 of the same paper has two lettered lists - `(a) (b)` for
+      its two situations and `(A)` for option A. Accepting both gives six entries and fails.
+      `FORMATS_OF_SCHEME` is therefore a *ladder*: same case first, then the family; within
+      each, bracketed `(%1)` before plain `%1.`. The first tier that comes to four wins.
+
+    Corpus: **+6** questions, no losses. ANIMAL KINGDOM 96->97, PCB Group B 174->175,
+    MTP-2-XI-2023 193->197. All twelve papers still verify.
+
+    Still refused, correctly: FST-1 Q170 letters three options `(A) (B) (C)` with Word and
+    types the fourth as `(4)`. Letters and digits are not one naming scheme, and
+    `FORMATS_OF_SCHEME` keeps a decimal label from matching a letter list.
+
+30. **An option split across two paragraphs stays refused - with a message that names the
+    key to press.** MTP-2-XI-2023 Q170 and Q195.
+
+    Reading it is unambiguous; *writing* it is not. `OptionShuffleApplier` buckets atoms by
+    paragraph and rewrites each paragraph in place, so an option's content has to have a line
+    to move into. Moving two paragraphs' worth into a one-paragraph slot would either join
+    the lines or leave an empty paragraph behind - a layout change, not just a re-ordering,
+    and the invariant this project is built on is that shuffling changes nothing but order.
+
+    The input fix is one keystroke and keeps the paper looking identical: **Shift+Enter**
+    (a `w:br`) instead of Enter. A `w:br` is an atom inside the paragraph, so it travels with
+    the content and the option still prints on two lines. `mixedLabels.test.ts` proves both
+    halves - the refusal, and that the same question shuffles once the break is a `w:br`.
+
+    **Not done, and this is the open question if it comes back:** supporting a *uniform*
+    multi-paragraph shape, where all four options have the same paragraph count (Q195 is
+    label+continuation four times over). Paragraph *k* of the source would map to paragraph
+    *k* of the destination, and layout would be preserved exactly. It is buildable and worth
+    exactly **one question** in the whole corpus; the ragged shape (Q170) would still be
+    refused, because there is no destination paragraph to map to.
+
+31. **Every refusal now says what is wrong *and* what to change, and they are grouped.**
+    `shared/skipReasons.ts`, `SkippedOptionShuffle.fix`, `SkippedOptionGroup`.
+
+    Finding 1 used to print `Q125 [BIOLOGY] options-not-found: No paragraph follows the
+    question stem.` - a slug that means nothing to whoever types the paper, and a sentence
+    that does not say what to do. The layout notes beside it already had `detail` + `fix`
+    and were grouped by problem; the skips now work the same way, so the two findings answer
+    the same question in the same shape.
+
+    - `SkipReason` gained a plain-language `SKIP_REASON_LABEL`. **The slug is never shown**,
+      and a test asserts it never reaches the report PDF.
+    - Every one of the 15 refusal sites was rewritten as cause + remedy. The remedy names a
+      key or a menu the author can find: *Shift+Enter*, *Convert to Text*, *Layout Options >
+      In line with text*.
+    - `groupSkippedOptions` gathers them by reason, most-affected first, with each question's
+      own detail underneath - so an odd one out inside a group of 24 is still findable.
+
+    Two things fell out of writing the tests, both real defects:
+    - A question whose options are *entirely* inside a table returned "nothing follows the
+      question stem", because `paragraphs.length === 0` returned before the table check.
+      Telling an author nothing follows a stem that plainly has four options would send them
+      hunting. `optionsInsideTable` is now checked in both places.
+    - One `fix` said 'write those "A." rather than "(A)"' - in a paper whose options are
+      `(1)`-`(4)`. That breaks the rule that user-facing text uses the paper's own option
+      names, and `dryRun.test.ts` caught it. The example was dropped; `expected` in the same
+      sentence is already rendered in the paper's scheme.
+
+32. **The dry run now accounts for every question, and the two exclusion lists no longer
+    survive a change of paper.** `shared/accounting.ts`, `PaperSummary.questionNumbers`,
+    `DryRunReport.questionAccounting` / `.optionAccounting`, `scripts/audit-report.mjs`.
+
+    Reported as two separate complaints about one report, on the ANIMAL KINGDOM paper:
+
+    - *"3 question(s) whose options cannot be shuffled with certainty"* beside a headline of
+      *"options would be shuffled for 77 questions"* out of 100. Both numbers were correct.
+      The other 20 were the user's own exclusion list, mentioned only inside finding 3, so
+      the report read as a contradiction.
+    - *"This paper has no question 102, 112, 117, 124, 158, 193"* on a 100-question paper.
+
+    One root cause. Picking a new paper cleared the summary, dry-run and results panels but
+    **not** the two exclusion fields, and the "Add these N to keep the option order" button
+    merges rather than replaces. The field held the union of three papers' suggestions -
+    MTP-2-XI-2023 (13), ANIMAL KINGDOM (7), Alternating Current (7) - which is 20 numbers in
+    1..100 and exactly those 6 above it. 97 - 20 = 77. Reproduced number for number before
+    changing anything.
+
+    - `browseButton` empties both lists when the chosen path differs from the current one,
+      and says so. A question number only means something in the paper it came from.
+    - The warning now says *why* a number is foreign ("check the list belongs to this paper,
+      and clear anything left over from another one"), because the numbers alone do not.
+    - The generation report gained the same note: a completed run made with a stale list left
+      no record of it anywhere.
+    - `accountFor` splits the paper into three disjoint outcomes - shuffled, kept by the tool,
+      kept because you asked - which always sum to the question count, and words the sum
+      once. The tool's list wins where the two overlap: taking such a question off the list
+      would change nothing, so calling it the user's doing sends them to the wrong place.
+    - `PaperSummary.questionNumbers` is now the single source of which numbers exist. The
+      section table, the totals and every "not in this paper" check read from it.
+
+    The sum is worded in the **main process** and shipped as `ShuffleAccounting.summary`,
+    because `renderer.ts` must have zero runtime imports (item 8). `scripts/ui-harness.mjs`
+    inlines the compiled `accounting.js` with its `export` keywords stripped rather than
+    re-implementing the arithmetic - a stub that computes it differently is a fourth answer.
+
+    `npm run audit` checks ~40 identities per report across the corpus under four settings
+    (44 reports). It was sabotage-tested: dropping one term from `accountFor` makes it report
+    44 contradictions. It also found one **wrong count in `regress.mjs`** - the `pinned`
+    column summed group memberships, and FST-1 has a question held by two different pictures,
+    so it read 16 for 15 questions. Now distinct; that is the only corpus number that moved.
+
 ## 5 · Decisions worth not relitigating
 
 | Decision | Why |
@@ -625,6 +789,14 @@ Commits, oldest first:
 | `splitLeadCorePad` kept | Justified by measurement, not taste: without it four clean papers lost characters |
 | Loose-signature verifier fallback **reverted** | It made a defective document report PASSED — the exact failure mode verification exists to prevent |
 | Symbol check keyed on the *missing bracket*, not on the symbol | The missing bracket is the actual signal; keying on the symbol punishes legitimate `60Ω` options |
+| A refusal owes a `fix`, not just a `detail` | A question the tool skips is only useful if the person who typed the paper can act on it; the fix names the key or the menu |
+| Skips are grouped by problem, like the layout notes | One paper has 24 questions with the same table problem; printing the same paragraph 24 times buries the one that failed for its own reason |
+| The `SkipReason` slug is never shown to the user | It is a name for the code to switch on. A test asserts no slug reaches the report |
+| Mixed labels are read by merging, never by searching for the missing one | One rule covers every mixture, and "does it come to exactly four, in order?" is its own safeguard against a lettered statement list |
+| A paragraph may hold both a Word-lettered option and a typed one | `(A) 1 amp <tab> (B) 1.5 amp` is one paragraph; excluding such paragraphs cost 76 questions in one paper |
+| An option split by a paragraph break is refused, not joined | Joining it or leaving an empty paragraph is a layout change; Shift+Enter is a one-keystroke input fix that prints identically |
+| A section heading is read from its whole paragraph, never from a word inside one | "cross-section" appears in a real question stem; requiring the paragraph to be *only* `SECTION B (...)` is what keeps prose out |
+| A part or section heading with no questions under it joins the one below | `BIOLOGY PART 1` sits directly above `SECTION - A`; opening a run for it would put two empty rows in every report |
 | Symbol-font characters are decoded; picture fonts are not | Symbol has a published encoding, so reading it is deduction. Wingdings numbers drawings, so there is genuinely nothing to read and the refusal stands |
 | The Symbol table is the real encoding, never the low byte | `F071` is θ, not `q`. A naive mapping would invent a lower-case option label out of a physics variable |
 | Option schemes tried letters → digits → roman | Order of decreasing certainty that a run of labels is the *options*; an `(i)…(iv)` item list must never outrank real answers |
@@ -658,20 +830,20 @@ Commits, oldest first:
 
 ## 6 · Current state
 
-- **288 tests pass**, 22 files. `npx vitest run`.
+- **326 tests pass**, 26 files. `npx vitest run`.
 - Renderer type-checks; UI harness builds; Electron launches clean.
 
 ### Paper corpus (`C:\ps\q-paper`)
 
 | Paper | Q | Options shuffled | Status |
 | --- | --- | --- | --- |
-| ANIMAL KINGDOM (TEST-1) | 100 | 96 | Works — **but see open issue 1** |
+| ANIMAL KINGDOM (TEST-1) | 100 | 97 | Works — **but see open issue 1** |
 | Extra MTP-1-XI-2023 | 50 | 50 | Works — every question |
 | MTP-2-PCB-XI-2027 Group A | 180 | 175 | Works |
-| MTP-2-PCB-XI-2027 Group B | 180 | 174 | Works |
+| MTP-2-PCB-XI-2027 Group B | 180 | 175 | Works |
 | MTP-2-PCB-XI-2027 Group C | 180 | 172 | Works |
 | MTP-2-PCB-XI-2027 Group D | 180 | 175 | Works |
-| MTP-2-XI-2023 | 200 | 191 | Works — the 33 Symbol-bracket labels are read now (item 27) |
+| MTP-2-XI-2023 | 200 | 197 | Works — 8 sections; items 27, 28 and 29. Only Q125, Q170, Q195 left |
 | Nano MTP 2 Physics | 12 | 11 | Works |
 | Nano MTP Chemistry-1 | 12 | 12 | Works |
 | Alternating Current XII-2024 | 100 | 97 | Works — the `57,` box and Q75’s space-run separator have since been retyped in Word |

@@ -47,14 +47,15 @@ async function main(): Promise<void> {
   if (args.inspect) {
     const summary = await service.inspect(file);
     console.log(`Questions: ${summary.questionCount}`);
-    for (const subject of summary.subjects) {
+    for (const group of summary.groups) {
       console.log(
-        `  ${subject.subject}: ${subject.questionCount} questions (${subject.firstQuestionNumber}-${subject.lastQuestionNumber})`,
+        `  ${group.group}: ${group.questionCount} questions (${group.firstQuestionNumber}-${group.lastQuestionNumber})`,
       );
     }
     console.log(`\nOptions that cannot be shuffled (${summary.unshufflableOptions.length}):`);
-    for (const item of summary.unshufflableOptions) {
-      console.log(`  Q${item.questionNumber} [${item.subject}] ${item.reason}: ${item.detail}`);
+    for (const group of summary.unshufflableGroups) {
+      console.log(`  ${group.label} - questions ${group.questionNumbers.join(', ')}`);
+      console.log(`    fix: ${group.fix}`);
     }
     console.log(`\nReview suggested (${summary.advisories.length}):`);
     for (const item of summary.advisories) {
@@ -83,27 +84,51 @@ async function main(): Promise<void> {
     console.log(`Dry run - nothing will be written.\n`);
     console.log(`Sets to generate: ${report.setCount}`);
     console.log(`Shuffle questions: ${report.shuffleQuestions ? 'yes' : 'no'}   Shuffle options: ${report.shuffleOptions ? 'yes' : 'no'}`);
-    console.log(`\n${'Subject'.padEnd(12)} ${'Questions'.padStart(9)} ${'Free to move'.padStart(13)} ${'Options shuffled'.padStart(17)}`);
-    for (const subject of report.subjects) {
+    // Wide enough for "CHEMISTRY - PART 2 SECTION A": a subject divided into sections is
+    // reported one row per section, because that is what shuffles as a unit.
+    const groupWidth = Math.max(7, ...report.groups.map((group) => group.group.length));
+    console.log(
+      `\n${'Section'.padEnd(groupWidth)} ${'Questions'.padStart(9)} ${'Free to move'.padStart(13)} ${'Options shuffled'.padStart(17)}`,
+    );
+    for (const group of report.groups) {
       console.log(
-        `${subject.subject.padEnd(12)} ${String(subject.questionCount).padStart(9)} ` +
-          `${String(subject.movable).padStart(13)} ${String(subject.optionsShuffled).padStart(17)}`,
+        `${group.group.padEnd(groupWidth)} ${String(group.questionCount).padStart(9)} ` +
+          `${String(group.movable).padStart(13)} ${String(group.optionsShuffled).padStart(17)}`,
       );
     }
-    console.log(
-      `\nTotals: ${report.questionsEligibleToMove} question(s) free to move, ` +
-        `options shuffled for ${report.optionsToShuffle} question(s).`,
-    );
+    // Both totals are shown as arithmetic that adds up to the paper, so a question the
+    // report does not otherwise mention is never left unaccounted for.
+    console.log(`\nTotals, out of ${report.paper.questionCount} question(s) in this paper:`);
+    console.log(`  Questions: ${report.questionAccounting.summary ?? 'not being shuffled.'}`);
+    console.log(`  Options:   ${report.optionAccounting.summary ?? 'not being shuffled.'}`);
+    if (report.questionAccounting.keptByUser.length > 0) {
+      console.log(`  You asked to keep in place: ${report.questionAccounting.keptByUser.join(', ')}`);
+    }
+    if (report.optionAccounting.keptByUser.length > 0) {
+      console.log(`  You asked to keep in order: ${report.optionAccounting.keptByUser.join(', ')}`);
+    }
     // Three sections, in this order and always shown, so the same three questions are
     // answered every run: what could not be read, what was read but is worth tidying, and
     // what was read fine but may not mean the same once its options move.
     console.log(
       `\n1. ${report.optionsKeptByTool.length} question(s) whose options cannot be shuffled with certainty.`,
     );
-    console.log('   These questions could not be parsed, so they keep their original option order');
-    console.log('   and their answer is unchanged.');
-    for (const item of report.optionsKeptByTool) {
-      console.log(`     Q${item.questionNumber} [${item.subject}] ${item.reason}: ${item.detail}`);
+    console.log('   These questions could not be read, so they keep their original option order');
+    console.log('   and their answer is unchanged. Each problem is listed once, with the questions');
+    console.log('   it affects and what to change in Word.');
+    // Grouped by problem: a paper typed one way goes wrong the same way many times over, and
+    // the fix is worth reading once rather than once per question.
+    for (const group of report.paper.unshufflableGroups) {
+      console.log(`\n   ${group.label} (${group.questionNumbers.length})`);
+      console.log(`     questions: ${group.questionNumbers.join(', ')}`);
+      // When every question in the group says the same thing, say it once.
+      if (group.sharedDetail) console.log(`     ${group.sharedDetail}`);
+      else {
+        for (const item of group.questions) {
+          console.log(`       Q${item.questionNumber} [${item.subject}] ${item.detail}`);
+        }
+      }
+      console.log(`     fix: ${group.fix}`);
     }
 
     const groups = report.paper.layoutNoteGroups;
@@ -139,10 +164,6 @@ async function main(): Promise<void> {
       console.log(`     Q${group.questionNumbers.join(', Q')} [${group.subject}] ${group.detail}`);
       console.log(`       fix: ${group.fix}`);
     }
-    console.log(
-      `\nOptions already kept because you asked (${report.optionsKeptByUser.length}): ` +
-        `${report.optionsKeptByUser.join(', ') || '-'}`,
-    );
     for (const warning of report.warnings) console.log(`\nWARNING: ${warning}`);
     return;
   }

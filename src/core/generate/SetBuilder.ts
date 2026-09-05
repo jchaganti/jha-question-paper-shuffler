@@ -102,6 +102,7 @@ export class SetBuilder {
           subject: section.subject,
           reason: parsed.reason,
           detail: parsed.detail,
+          fix: parsed.fix,
         });
         return;
       }
@@ -121,7 +122,7 @@ export class SetBuilder {
 
       order.forEach((sourceIndex, newIndex) => {
         const block = section.blocks[sourceIndex];
-        if (!block) throw new Error(`Plan references question ${sourceIndex} of ${section.subject}, which does not exist`);
+        if (!block) throw new Error(`Plan references question ${sourceIndex} of ${section.label}, which does not exist`);
         newBodyNodes.push(...block.nodes);
 
         const newNumber = section.blocks[newIndex]!.printedNumber;

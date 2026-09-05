@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
+import { unknownNumbers } from '../../shared/accounting';
 import { questionsWithLayoutNotes } from '../../shared/layoutNotes';
 import { renderAnswer } from '../../shared/answerStyle';
 import type { GenerationRequest, GenerationResult } from '../../shared/types';
@@ -63,14 +64,34 @@ export class ReportWriter {
         'the answer mapping of every set.',
     });
 
+    // A number that belongs to some other paper does nothing, quietly. Said here because
+    // this report is the only record of what a completed run was actually asked to do.
+    const strayQuestions = unknownNumbers(paper.questionNumbers, request.questionExclusions);
+    const strayOptions = unknownNumbers(paper.questionNumbers, request.optionExclusions);
+    if (strayQuestions.length > 0 || strayOptions.length > 0) {
+      const stray = [
+        ...(strayQuestions.length > 0 ? [`"questions kept in place" named ${strayQuestions.join(', ')}`] : []),
+        ...(strayOptions.length > 0 ? [`"option order kept" named ${strayOptions.join(', ')}`] : []),
+      ];
+      blocks.push({
+        kind: 'paragraph',
+        text:
+          `Note: ${stray.join(', and ')} - question numbers this paper does not have, so ` +
+          'they had no effect. A question number only means something in the paper it came ' +
+          'from; check that the lists above were meant for this paper.',
+      });
+    }
+
     blocks.push({ kind: 'heading', text: 'Paper structure' });
     blocks.push({
       kind: 'table',
-      columns: [{ header: 'Subject' }, { header: 'Questions', align: 'right' }, { header: 'Range' }],
-      rows: paper.subjects.map((subject) => [
-        subject.subject,
-        String(subject.questionCount),
-        `${subject.firstQuestionNumber}-${subject.lastQuestionNumber}`,
+      columns: [{ header: 'Section' }, { header: 'Questions', align: 'right' }, { header: 'Range' }],
+      // One row per run of questions that shuffles on its own: a subject, or a section
+      // within one. Questions never move between these rows.
+      rows: paper.groups.map((group) => [
+        group.group,
+        String(group.questionCount),
+        `${group.firstQuestionNumber}-${group.lastQuestionNumber}`,
       ]),
     });
     blocks.push({ kind: 'paragraph', text: `Total questions: ${paper.questionCount}` });
@@ -81,19 +102,38 @@ export class ReportWriter {
         kind: 'paragraph',
         text: 'These questions keep their original option order, and their answer, in every set.',
       });
+      // Grouped by problem, with the fix stated once - the same shape as the layout notes
+      // below, because it answers the same question: what should be changed in Word?
       blocks.push({
         kind: 'table',
         columns: [
-          { header: 'Q', align: 'right' },
-          { header: 'Subject' },
-          { header: 'Reason', weight: 1 },
+          { header: 'Problem', weight: 1 },
+          { header: 'Questions', weight: 1 },
+          { header: 'Fix', weight: 2 },
         ],
-        rows: paper.unshufflableOptions.map((item) => [
-          String(item.questionNumber),
-          item.subject,
-          `${item.reason}: ${item.detail}`,
+        rows: paper.unshufflableGroups.map((group) => [
+          `${group.label}. ${group.sharedDetail ?? ''}`.trim(),
+          group.questionNumbers.join(', '),
+          group.fix,
         ]),
       });
+      // Then the questions whose problem is their own rather than the group's, so an odd
+      // one out inside a large group is still findable. A group whose questions all say the
+      // same thing has already said it above.
+      const varied = paper.unshufflableGroups.filter((group) => group.sharedDetail === undefined);
+      if (varied.length > 0) {
+        blocks.push({
+          kind: 'table',
+          columns: [
+            { header: 'Q', align: 'right' },
+            { header: 'Section' },
+            { header: 'What is wrong with this question', weight: 1 },
+          ],
+          rows: varied.flatMap((group) =>
+            group.questions.map((item) => [String(item.questionNumber), item.subject, item.detail]),
+          ),
+        });
+      }
     }
 
     if (paper.pinnedQuestions.length > 0) {

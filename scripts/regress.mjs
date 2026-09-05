@@ -89,9 +89,11 @@ async function runOne(service, name, file) {
   }
   const row = {
     name: label,
-    questions: report.subjects.reduce((sum, subject) => sum + subject.questionCount, 0),
+    questions: report.groups.reduce((sum, group) => sum + group.questionCount, 0),
     shuffled: report.optionsToShuffle,
-    pinned: report.questionsKeptByTool.reduce((sum, group) => sum + group.questionNumbers.length, 0),
+    // Distinct questions, not group memberships: one question can be held by two different
+    // pictures and so appear in two groups. This is the same count the report headlines.
+    pinned: new Set(report.questionsKeptByTool.flatMap((group) => group.questionNumbers)).size,
     reasons: [...counts].sort((a, b) => b[1] - a[1]),
     status: 'read',
   };

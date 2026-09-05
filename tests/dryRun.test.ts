@@ -46,9 +46,9 @@ describe('dryRun', () => {
     expect(report.questionsEligibleToMove).toBe(7);
     expect(report.optionsToShuffle).toBe(7);
     expect(report.optionsKeptByTool).toEqual([]);
-    expect(report.subjects).toEqual([
-      { subject: 'PHYSICS', questionCount: 4, movable: 4, optionsShuffled: 4 },
-      { subject: 'CHEMISTRY', questionCount: 3, movable: 3, optionsShuffled: 3 },
+    expect(report.groups).toEqual([
+      { group: 'PHYSICS', questionCount: 4, movable: 4, optionsShuffled: 4 },
+      { group: 'CHEMISTRY', questionCount: 3, movable: 3, optionsShuffled: 3 },
     ]);
   });
 
@@ -57,9 +57,10 @@ describe('dryRun', () => {
 
     expect(report.questionsEligibleToMove).toBe(5);
     expect(report.optionsToShuffle).toBe(5);
-    expect(report.optionsKeptByUser).toEqual([5, 6]);
-    expect(report.subjects[0]).toMatchObject({ subject: 'PHYSICS', movable: 2 });
-    expect(report.subjects[1]).toMatchObject({ subject: 'CHEMISTRY', optionsShuffled: 1 });
+    expect(report.optionAccounting.keptByUser).toEqual([5, 6]);
+    expect(report.questionAccounting.keptByUser).toEqual([1, 2]);
+    expect(report.groups[0]).toMatchObject({ group: 'PHYSICS', movable: 2 });
+    expect(report.groups[1]).toMatchObject({ group: 'CHEMISTRY', optionsShuffled: 1 });
   });
 
   it('reports nothing movable or shuffled when a toggle is off', async () => {
@@ -86,9 +87,14 @@ describe('dryRun', () => {
 
   it('warns about exclusion numbers that do not exist in the paper', async () => {
     const report = await service.dryRun(request({ questionExclusions: [3, 400], optionExclusions: [999] }));
-    expect(report.warnings.join(' ')).toMatch(/no question 400/);
-    expect(report.warnings.join(' ')).toMatch(/no question 999/);
-    expect(report.warnings.join(' ')).not.toMatch(/no question 3\b/);
+    const warnings = report.warnings.join(' ');
+    expect(warnings).toMatch(/keep these question numbers in place[^.]*400/);
+    expect(warnings).toMatch(/keep the option order of these questions[^.]*999/);
+    // The paper does have question 3, so it is not among the numbers reported as missing.
+    expect(warnings).not.toMatch(/names questions? 3,/);
+    // Says why the numbers are foreign, because a list left over from a different paper is
+    // by far the likeliest reason for one - and the numbers alone do not say that.
+    expect(warnings).toMatch(/left over from another one/);
   });
 
   it('warns when no subject headings were recognised', async () => {
@@ -147,10 +153,10 @@ describe('dryRun', () => {
     );
 
     const report = await service.dryRun(request({ setCount: 1 }));
-    const details = report.optionsKeptByTool.map((item) => item.detail).join(' ');
+    const details = report.optionsKeptByTool.map((item) => `${item.detail} ${item.fix}`).join(' ');
 
     expect(report.optionsKeptByTool.length).toBeGreaterThan(0);
-    expect(details).toMatch(/1,2,3,4/);
+    expect(details).toMatch(/\(1\) \(2\) \(3\) \(4\)/);
     expect(details).not.toMatch(/\(?[ABCD]\)?[,)]/);
   });
 });

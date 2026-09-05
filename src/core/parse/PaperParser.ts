@@ -6,6 +6,7 @@ import { NumberingIndex } from './NumberingIndex';
 import {
   DEFAULT_ANSWER_KEY_HEADINGS,
   DEFAULT_SUBJECT_HEADINGS,
+  FALLBACK_SUBJECT,
   type ParsedPaper,
   type PaperSection,
   type ParserOptions,
@@ -87,19 +88,25 @@ export class PaperParser {
     });
 
     const preambleNodes = questionRegion.slice(0, headingIndexes[0] ?? 0);
-    const sectionRanges: { subject: string; start: number; end: number }[] = [];
+    const subjectRanges: { subject: string; start: number; end: number }[] = [];
     if (headingIndexes.length === 0) {
-      sectionRanges.push({ subject: 'ALL', start: 0, end: questionRegion.length });
+      subjectRanges.push({ subject: FALLBACK_SUBJECT, start: 0, end: questionRegion.length });
     } else {
       headingIndexes.forEach((start, i) => {
         const end = headingIndexes[i + 1] ?? questionRegion.length;
-        sectionRanges.push({
+        subjectRanges.push({
           subject: visibleText(questionRegion[start]!).replace(/\s+/g, ' ').trim().toUpperCase(),
           start,
           end,
         });
       });
     }
+
+    // A subject is divided further by its own "SECTION A" / "PART 2" headings, and each
+    // division shuffles separately - see `splitIntoGroups`.
+    const sectionRanges = subjectRanges.flatMap((range) =>
+      splitIntoGroups(questionRegion, range, isQuestionStart),
+    );
 
     let printedIndex = 0;
     const sections: PaperSection[] = sectionRanges.map((range, sectionIndex) => {
@@ -133,10 +140,19 @@ export class PaperParser {
         }
       }
 
-      // Only a real heading counts: the "ALL" fallback section starts at the top of the
-      // paper, where the first paragraph is the paper's title, not a subject.
-      const headingNode = headingIndexes.length > 0 ? nodes[0] : undefined;
-      return { subject: range.subject, headingNode, headerNodes, blocks, tailNodes };
+      // Only a real heading counts, and only on the division that opens the subject: the
+      // "ALL" fallback section starts at the top of the paper, where the first paragraph is
+      // the paper's title rather than a subject, and "SECTION B" does not start a new page.
+      const headingNode = headingIndexes.length > 0 && range.opensSubject ? nodes[0] : undefined;
+      return {
+        subject: range.subject,
+        group: range.group,
+        label: groupLabel(range.subject, range.group),
+        headingNode,
+        headerNodes,
+        blocks,
+        tailNodes,
+      };
     });
 
     return {
@@ -150,6 +166,97 @@ export class PaperParser {
       questionNumIds,
     };
   }
+}
+
+/**
+ * A paragraph that divides a subject: "SECTION A (All questions are compulsory)",
+ * "SECTION - B", "PART II", "BIOLOGY PART 1".
+ *
+ * Read rather than assumed, so a paper that writes its divisions differently still works:
+ * an optional leading word (papers repeat the subject - "BIOLOGY PART 1"), the word PART or
+ * SECTION, an optional dash or colon, and the division's name - a letter, a number or a
+ * roman numeral. What follows may only be a parenthesised note, which is where papers put
+ * "(Attempt any 10 questions)".
+ *
+ * Requiring the whole paragraph to be that shape is what keeps prose out: a question
+ * mentioning "cross-section" has words either side, and a question stem is auto-numbered,
+ * which is checked separately.
+ */
+const DIVIDER_RE =
+  /^(?:[A-Z]+\s+)?(PART|SECTION)\s*[-‐-―:.]?\s*([A-Z]|\d{1,2}|[IVX]{1,4})\s*(?:\([^)]*\))?$/;
+
+/**
+ * Splits one subject at its own division headings, so that questions shuffle within a
+ * division and never across one.
+ *
+ * The divisions are not merely labels. "SECTION A (All questions are compulsory)" and
+ * "SECTION B (Attempt any 10 questions)" ask different things of the candidate, and moving
+ * a question between them would change the paper. A subject with no such headings comes
+ * back as one group, exactly as before.
+ *
+ * PART headings nest above SECTION headings, so the two are tracked separately and the
+ * label carries both: "PART 2 SECTION A". A heading with no questions before the next one -
+ * "BIOLOGY PART 1" immediately above "SECTION - A" - does not open a group of its own; it
+ * joins the heading below it, which is the group the questions are actually in.
+ */
+function splitIntoGroups(
+  questionRegion: readonly Element[],
+  range: { subject: string; start: number; end: number },
+  isQuestionStart: (node: Element) => boolean,
+): { subject: string; group?: string; start: number; end: number; opensSubject: boolean }[] {
+  const cuts: { start: number; group?: string }[] = [{ start: range.start }];
+  let part: string | undefined;
+  let section: string | undefined;
+
+  for (let index = range.start + 1; index < range.end; index++) {
+    const node = questionRegion[index]!;
+    const heading = dividerHeading(node);
+    if (!heading) continue;
+
+    if (heading.keyword === 'PART') {
+      part = `PART ${heading.name}`;
+      // A new part restarts its sections, so "PART 2" alone must not keep Part 1's section.
+      section = undefined;
+    } else {
+      section = `SECTION ${heading.name}`;
+    }
+    const group = [part, section].filter((value) => value !== undefined).join(' ');
+
+    const open = cuts[cuts.length - 1]!;
+    const hasQuestions = questionRegion.slice(open.start, index).some(isQuestionStart);
+    if (hasQuestions) cuts.push({ start: index, group });
+    else open.group = group;
+  }
+
+  return cuts.map((cut, i) => ({
+    subject: range.subject,
+    group: cut.group,
+    start: cut.start,
+    end: cuts[i + 1]?.start ?? range.end,
+    opensSubject: i === 0,
+  }));
+}
+
+/**
+ * How one run of questions is named to the user.
+ *
+ * "ALL" is the stand-in for a paper whose subject headings were not recognised, so it is
+ * left out of the name: a single-subject paper divided into sections reads "SECTION A",
+ * not "ALL - SECTION A".
+ */
+function groupLabel(subject: string, group: string | undefined): string {
+  if (group === undefined) return subject;
+  return subject === FALLBACK_SUBJECT ? group : `${subject} - ${group}`;
+}
+
+/** The keyword and name of a division heading, or undefined when the paragraph is not one. */
+function dividerHeading(node: Element): { keyword: string; name: string } | undefined {
+  if (node.namespaceURI !== NS.w || node.localName !== 'p') return undefined;
+  // A question stem is auto-numbered; a heading never is.
+  if (paragraphNumId(node) !== undefined) return undefined;
+  const text = visibleText(node).replace(/\s+/g, ' ').trim().toUpperCase();
+  const match = DIVIDER_RE.exec(text);
+  return match ? { keyword: match[1]!, name: match[2]! } : undefined;
 }
 
 /**

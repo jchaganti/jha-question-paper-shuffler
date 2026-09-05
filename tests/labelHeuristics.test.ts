@@ -100,7 +100,7 @@ describe('two options on one line pushed apart with spaces instead of a tab', ()
     if (parsed.ok) return;
     expect(parsed.reason).toBe('label-after-spaces-not-tab');
     expect(parsed.detail).toContain('(B), (D)');
-    expect(parsed.detail).toContain('press Tab');
+    expect(parsed.fix).toContain('press Tab');
   });
 
   it('is not blamed when the space run does not account for every option', async () => {
