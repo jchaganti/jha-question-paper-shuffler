@@ -51,22 +51,22 @@ const paper = {
       12,
       'PHYSICS',
       'options-not-found',
-      'No option labels were found under this question - neither typed "(A)" to "(D)" nor a lettered list made by Word.',
-      'Check that this question has four options and that each one starts with its label.',
+      'No option labels were found under this question. There is text below it, but nothing that reads as four labelled options.',
+      'Check in Word that this question really has four options and that each one starts with its own label.',
     ),
     skip(
       50,
       'CHEMISTRY',
       'unexpected-label-sequence',
-      'This question should carry the labels (A) (B) (C) (D), but reading it gives "ABD" - (C) could not be found.',
-      'Check that this question has exactly four options, each label used once, each at the start of its line or straight after a Tab.',
+      'This question should have the four labels (A) (B) (C) (D). The tool found "ABD" and could not find (C).',
+      'In Word, check that this question has exactly four options labelled (A) (B) (C) (D), each label used once, and each label either at the start of its line or straight after a Tab.',
     ),
     skip(
       103,
       'BIOLOGY',
       'options-inside-table',
-      'The option labels are inside a table. An option is moved by moving its text along the line it sits on, and a table cell is not a line of text.',
-      'Select the table, then on the Layout tab choose Convert to Text, separating with tabs.',
+      'The options of this question are in a table. To swap two options the tool moves their text along the line they sit on, and text in a table is not on a line it can move along.',
+      'Click anywhere in the table. On the Layout tab, click Convert to Text and choose Tabs.',
     ),
   ],
   pinnedQuestions: [
@@ -74,19 +74,34 @@ const paper = {
       questionNumbers: [41, 42],
       subject: 'PHYSICS',
       detail:
-        'A floating picture is anchored in the last paragraph of question 41, so it is drawn over ' +
-        'whatever follows it - question 42. Moving either question away from the other would take ' +
-        'the picture with it, leaving one question without its artwork.',
+        'A picture is attached to the end of question 41 but is drawn below that point, over ' +
+        'question 42. It may well be the picture for that next question. If the two questions were ' +
+        'separated, the picture would follow one of them and the other would lose its diagram.',
       fix:
-        'In Word, click the picture at the end of question 41 and drag its anchor marker into the ' +
-        'question the picture illustrates - or set its Layout Options to "In line with text", which ' +
-        'anchors it exactly where it sits.',
+        'In Word, click the picture near question 41. A small anchor symbol appears in the margin, ' +
+        'showing which question it is attached to; drag that anchor into the question the picture ' +
+        'really belongs to.',
     },
   ],
   advisories: [
-    advisory(49, 'CHEMISTRY', 'assertion-reason', 'Assertion-Reason / Statement-I-II style question.'),
-    advisory(59, 'CHEMISTRY', 'references-other-option', 'Option text refers to another option: "Both (A) and (B)"'),
-    advisory(136, 'BIOLOGY', 'catch-all-option', 'Contains a catch-all option: "None of the above"'),
+    advisory(
+      49,
+      'CHEMISTRY',
+      'assertion-reason',
+      'This is an Assertion-Reason question, and its options do not spell out what they mean on their own.',
+    ),
+    advisory(
+      59,
+      'CHEMISTRY',
+      'references-other-option',
+      'One option points at another option: "Both (A) and (B)". If the options move, it would point at something else.',
+    ),
+    advisory(
+      136,
+      'BIOLOGY',
+      'catch-all-option',
+      'One option is "None of the above", which only makes sense at the end of the list.',
+    ),
   ],
   // The dry-run panel shows these grouped, exactly as the main process sends them.
   unshufflableGroups: [],
@@ -102,22 +117,22 @@ const paper = {
   layoutNoteGroups: [
     {
       issue: 'mixed-auto-and-typed-labels',
-      label: 'Some options are lettered by Word and the rest typed by hand',
-      fix: 'Letter all four options the same way: either let Word letter all four, or type all four labels.',
+      label: 'Some labels come from Word and the rest were typed by hand',
+      fix: 'Label all four options the same way: either let Word label all four, or type all four labels yourself.',
       questionNumbers: [116, 127, 128, 131],
     },
     {
       issue: 'label-not-after-tab',
       label: 'An option label has no tab in front of it',
-      fix: 'Press Tab before each option label, so the label always follows a tab.',
+      fix: 'Press the Tab key before each option label, so every label follows a tab.',
       questionNumbers: [8, 26],
     },
     {
       issue: 'several-lettered-lists',
-      label: 'More than one lettered list could have been the options',
+      label: 'Two lists here could have been the options',
       fix:
-        'Letter only the options with a bracketed "(A) (B) (C) (D)" list, and give any other lettered ' +
-        'list a different style, such as "A." or "(i) (ii)".',
+        'Use the "(A) (B) (C) (D)" style for the options only. Give any other list in the question a ' +
+        'different style, such as "1." or "(i) (ii)".',
       questionNumbers: [89],
     },
   ],
@@ -152,11 +167,36 @@ const letterer = `const setSuffix = ${setSuffix.toString()};`;
 const stub = `
 ${accounting}
 ${letterer}
+/*
+ * The harness can be opened from a file:// path, a data: URL or a preview pane, and some of
+ * those forbid localStorage outright - it throws rather than returning null. Reading it
+ * unguarded took the whole stub down with it, leaving a page with no bridge at all.
+ */
+function storedTheme() {
+  try {
+    return localStorage.getItem('harness-theme') || 'light';
+  } catch {
+    return 'light';
+  }
+}
+document.documentElement.dataset.theme = storedTheme();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const PAPER = ${JSON.stringify(paper)};
 let progressListener = () => {};
 
 window.shuffler = {
+  // The real app applies the stored mode in the preload script, before the page paints.
+  // The harness has no preload, so it does the same job here and keeps the choice in the
+  // browser instead of on disk.
+  theme: storedTheme(),
+  setTheme: async (theme) => {
+    try {
+      localStorage.setItem('harness-theme', theme);
+      return true;
+    } catch {
+      return false;
+    }
+  },
   pickSourceFile: async () => PAPER.sourceFile,
   inspect: async () => ({ ok: true, value: PAPER }),
   dryRun: async (request) => {

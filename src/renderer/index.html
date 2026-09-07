@@ -13,6 +13,14 @@
           <h1>Question Paper Shuffler</h1>
           <p>Generate multiple sets of a question paper with shuffled questions and options, each with its own answer key.</p>
         </div>
+        <div class="appearance">
+          <label for="theme">Appearance</label>
+          <select id="theme">
+            <option value="light">Light</option>
+            <option value="dim">Dim</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
       </header>
 
       <details class="card practices">
@@ -197,7 +205,7 @@
         <div class="grid">
           <div class="field">
             <label for="set-count">Number of sets</label>
-            <input id="set-count" type="number" min="2" max="100" value="4" />
+            <input id="set-count" type="number" min="2" max="26" value="4" />
           </div>
           <div class="field">
             <label for="seed">Seed <span class="muted">(optional)</span></label>

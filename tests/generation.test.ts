@@ -343,10 +343,10 @@ describe('GenerationService', () => {
   });
 
   it('rejects invalid input', async () => {
-    await expect(service.generate(request({ setCount: 0 }))).rejects.toThrow(/between 2 and 100/);
+    await expect(service.generate(request({ setCount: 0 }))).rejects.toThrow(/between 2 and 26/);
     // One set is not a set of anything: refused, with a reason rather than a bare range.
-    await expect(service.generate(request({ setCount: 1 }))).rejects.toThrow(/at least two/);
-    await expect(service.generate(request({ setCount: 101 }))).rejects.toThrow(/between 2 and 100/);
+    await expect(service.generate(request({ setCount: 1 }))).rejects.toThrow(/just a copy of your paper/);
+    await expect(service.generate(request({ setCount: 27 }))).rejects.toThrow(/between 2 and 26/);
     await expect(service.generate(request({ setCount: 2.5 }))).rejects.toThrow(/whole number/);
     await expect(
       service.generate(request({ shuffleQuestions: false, shuffleOptions: false })),

@@ -9,6 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  MAX_SETS,
   OutputFolderResolver,
   fileNameTimestamp,
   readableTimestamp,
@@ -123,25 +124,19 @@ describe('setSuffix', () => {
     expect(setSuffix(26)).toBe('Z');
   });
 
-  it('carries on past Z the way a spreadsheet names its columns', () => {
-    // 100 is the largest run the tool allows, so CV is as far as this ever goes.
-    expect(setSuffix(27)).toBe('AA');
-    expect(setSuffix(28)).toBe('AB');
-    expect(setSuffix(52)).toBe('AZ');
-    expect(setSuffix(53)).toBe('BA');
-    expect(setSuffix(100)).toBe('CV');
+  it('gives every set of the largest allowed run a single-letter name of its own', () => {
+    // The alphabet is the limit, which is why MAX_SETS is 26: every set can be named out
+    // loud, and no run ever needs a two-letter name such as "AA".
+    const names = Array.from({ length: MAX_SETS }, (_unused, index) => setSuffix(index + 1));
+    expect(new Set(names).size).toBe(MAX_SETS);
+    for (const name of names) expect(name).toMatch(/^[A-Z]$/);
   });
 
-  it('gives every set of the largest allowed run a name of its own', () => {
-    const names = Array.from({ length: 100 }, (_unused, index) => setSuffix(index + 1));
-    expect(new Set(names).size).toBe(100);
-    for (const name of names) expect(name).toMatch(/^[A-Z]+$/);
-  });
-
-  it('refuses a set number that is not a whole number from 1 upwards', () => {
-    expect(() => setSuffix(0)).toThrow(/from 1 upwards/);
-    expect(() => setSuffix(-1)).toThrow(/from 1 upwards/);
-    expect(() => setSuffix(1.5)).toThrow(/from 1 upwards/);
+  it('refuses a set number outside the alphabet', () => {
+    expect(() => setSuffix(0)).toThrow(/from 1 to 26/);
+    expect(() => setSuffix(-1)).toThrow(/from 1 to 26/);
+    expect(() => setSuffix(1.5)).toThrow(/from 1 to 26/);
+    expect(() => setSuffix(MAX_SETS + 1)).toThrow(/from 1 to 26/);
   });
 });
 

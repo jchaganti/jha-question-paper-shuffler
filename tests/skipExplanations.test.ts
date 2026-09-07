@@ -163,11 +163,11 @@ describe('what reaches the run', () => {
       .flat();
     // Every question in the table group says the same thing, so the heading carries it.
     expect(cells.some((cell) => cell.startsWith(SKIP_REASON_LABEL['options-inside-table']))).toBe(true);
-    expect(cells.some((cell) => cell.includes('a table cell is not a line of text'))).toBe(true);
+    expect(cells.some((cell) => cell.includes('text in a table is not on a line'))).toBe(true);
     expect(cells.some((cell) => cell.includes('Convert to Text'))).toBe(true);
     expect(cells).toContain('1, 2');
     // The split option is a group of one, so its own sentence is there as well.
-    expect(cells.some((cell) => cell.includes('Option (B) runs on to a paragraph of its own'))).toBe(true);
+    expect(cells.some((cell) => cell.includes('Option (B) carries on to the line below'))).toBe(true);
   });
 
   it('never shows the reason slug to the user', async () => {

@@ -132,7 +132,7 @@ describe('options whose answers are floating pictures', () => {
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
     expect(parsed.reason).toBe('option-contains-floating-graphic');
-    expect(parsed.detail).toMatch(/floating picture placed from the page/);
-    expect(parsed.fix).toMatch(/In line with text/);
+    expect(parsed.detail).toMatch(/positioned against the page/);
+    expect(parsed.fix).toMatch(/In Line with Text/);
   });
 });

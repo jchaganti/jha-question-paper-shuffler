@@ -20,6 +20,7 @@
     "cli": "npm run build:main && node dist/cli/cli.js",
     "regress": "npm run build:main && node scripts/regress.mjs",
     "audit": "npm run build:main && node scripts/audit-report.mjs",
+    "check:preload": "npm run build:main && node scripts/preload-sandbox-check.js",
     "ui:harness": "npm run build && node scripts/ui-harness.mjs",
     "test": "vitest run",
     "test:watch": "vitest"

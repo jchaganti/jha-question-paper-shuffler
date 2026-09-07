@@ -222,7 +222,7 @@ describe('auto-lettered options', () => {
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
     expect(parsed.reason).toBe('option-contains-floating-graphic');
-    expect(parsed.fix).toMatch(/In line with text/);
+    expect(parsed.fix).toMatch(/In Line with Text/);
   });
 
   /**
@@ -267,7 +267,7 @@ describe('auto-lettered options', () => {
 
       const note = parsed.notes.find((entry) => entry.issue === 'mixed-auto-and-typed-labels');
       expect(note).toBeDefined();
-      expect(note!.detail).toMatch(/third option is lettered by Word/);
+      expect(note!.detail).toMatch(/label on the third option/);
     });
 
     it('moves the answers while every label stays where it is', async () => {

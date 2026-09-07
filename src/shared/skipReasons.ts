@@ -15,14 +15,14 @@ import type { SkipReason, SkippedOptionGroup, SkippedOptionShuffle } from './typ
 export const SKIP_REASON_LABEL: Record<SkipReason, string> = {
   'excluded-by-user': 'You asked for this question to keep its option order',
   'options-not-found': 'The four options could not be found',
-  'unexpected-label-sequence': 'The option labels do not read as one run of four',
-  'option-spans-paragraphs': 'An option is split across two paragraphs',
-  'option-contains-floating-graphic': 'A floating picture sits inside an option',
-  'options-inside-table': 'The options are laid out inside a table',
-  'label-bracket-is-a-symbol': 'An option label starts with a character from a picture font',
-  'label-after-spaces-not-tab': 'Two options on a line are parted by spaces, not a tab',
-  'unexpected-option-count': 'The auto-lettered option list does not have four items',
-  'ambiguous-option-list': 'More than one lettered list could be the options',
+  'unexpected-label-sequence': 'The four option labels are not all there',
+  'option-spans-paragraphs': 'An option carries on to the next line',
+  'option-contains-floating-graphic': 'A picture inside an option floats instead of sitting in the line',
+  'options-inside-table': 'The options are in a table',
+  'label-bracket-is-a-symbol': 'An option label was put in with Insert, Symbol',
+  'label-after-spaces-not-tab': 'Options on one line are spaced apart instead of tabbed',
+  'unexpected-option-count': 'Word is lettering this question, but not four options',
+  'ambiguous-option-list': 'Two lists here look like the options',
 };
 
 /**

@@ -61,12 +61,13 @@ exact box/label to fix, an entry in the in-app **best practices** list
 ```bash
 npm run build        # tsc main (CommonJS) + renderer (ESM) + copy static assets
 npm start            # build, then launch Electron
-npx vitest run       # 330 tests, 26 files
+npx vitest run       # 341 tests, 27 files
 npm run portable     # release/Question Paper Shuffler <v> (portable).zip - shareable, no archiver needed
 npm run dist         # release/... Setup <v>.exe - needs a 7za the machine will run, see item 26
 npm run cli -- --file "paper.docx" --shuffle-questions --shuffle-options --dry-run
 npm run regress      # every paper in C:\ps\q-paper; add -- --generate to also verify sets
 npm run audit        # every dry-run report in the corpus, checked against itself
+npm run check:preload # loads the compiled preload under sandbox rules - see item 35
 node scripts/ui-harness.mjs   # dist/web/renderer/harness.html — real UI, stubbed backend
 ```
 
@@ -807,6 +808,92 @@ Commits, oldest first:
     failure - they were exercising an input that is no longer valid. `ui-harness.mjs` inlines
     the real `setSuffix` alongside the real `accountFor`, for the same reason.
 
+34. **Plainer words, 26 sets at most, and three appearance modes.** Three requests in one
+    turn.
+
+    **The wording.** Every message the dry run shows was rewritten for someone who uses Word
+    but is not an expert. Out went the vocabulary of the file format - "paragraph", "stem",
+    "auto-lettered", "floating picture", "picture font", "run of four" - and in came what a
+    person does: *Enter was pressed in the middle of it*, *right-click the picture, choose
+    Wrap Text, then In Line with Text*, *click the numbering button on the Home tab*. Word's
+    menu items are now quoted in Word's own capitalisation ("In Line with Text"), which is
+    what someone hunting the menu will be reading.
+
+    22 tests asserted on the old sentences and failed. Each was repointed at the new wording
+    rather than loosened: they still check the message names the right option and gives the
+    right remedy. One real leak turned up while doing it - finding 3 in the CLI printed the
+    advisory `kind` slug (`catch-all-option:`) in front of every line, the same class of
+    defect as item 31's `SkipReason`. No surface prints a slug now.
+
+    **26 sets.** The cap was 100 and arbitrary; it is now the alphabet, which is the real
+    constraint - past Z a set needs a two-letter name nobody would say out loud. `MAX_SETS`
+    and `MIN_SETS` live beside `setSuffix` and the refusal explains itself: *"One set on its
+    own is just a copy of your paper, and the sets are named Set A to Set Z, so 26 is as
+    many as can be named."* `setSuffix` lost its bijective base-26 branch, which was now
+    unreachable. A test reads `index.html` and asserts the input's `min`/`max` still equal
+    `MIN_SETS`/`MAX_SETS`, because those two numbers are in two files.
+
+    **Light / Dim / Dark.** Asked for and confirmed: exactly three modes, no "follow
+    Windows", Dim being a warm charcoal rather than a muted light. `@media
+    (prefers-color-scheme: dark)` is gone - an explicit choice has to beat the OS setting.
+
+    Open issue 2 ("palette flash at startup") was closed by *removing* the old colour
+    picker, so bringing a stored choice back reopened it. Two things prevent it:
+    - `PreferencesStore` is read **synchronously** in `createWindow`, before the
+      `BrowserWindow` exists, so `backgroundColor` is already the right one.
+    - the **preload script** puts `data-theme` on `<html>` at `DOMContentLoaded`.
+      `renderer.js` is a module script and does not run until after the first paint, so
+      doing it there would show one frame of the wrong theme.
+
+    That makes `preload.ts` the one file compiled with the main process that touches the
+    DOM, and `tsconfig.main.json` deliberately has no DOM lib. Rather than add it - which
+    would let `main.ts` reach for browser APIs that are not there - the preload declares the
+    two members it needs and reaches them through `globalThis`.
+
+    A test parses `styles.css` and asserts each mode's `--page` equals `THEME_PAGE_COLOUR`
+    (the main process cannot read the stylesheet, so the copy needs a guard) and that Dim
+    and Dark redefine every colour Light defines - a missed one would leave a light colour
+    on a dark page.
+
+    `ui-harness.mjs` gained the same picker and revealed a bug of its own: it read
+    `localStorage` unguarded, and in a `data:` URL that **throws** rather than returning
+    null, taking the whole stub down and leaving a page with no bridge at all. Guarded.
+
+35. **The appearance picker did not work at all, and the palette is now Windows'.**
+
+    **The bug, which was much bigger than the picker.** `preload.ts` opens with a comment
+    saying a sandboxed preload cannot `require` relative modules, which is why the channel
+    names are inlined in it. Item 34 added `import { DEFAULT_THEME, asTheme } from
+    '../shared/theme'` a few lines below that comment. `sandbox` defaults to **true** when
+    `nodeIntegration` is false, so the compiled `require("../shared/theme")` threw at load,
+    the preload died, `window.shuffler` was never defined - and **every control in the
+    window** was dead, not just the drop-down. Nothing catches it: it compiles, it packages,
+    and it looks fine until it is clicked.
+
+    Fixed by inlining `THEMES` and the fallback the same way the channels are, with the same
+    compiler-checked guard (`const themesMatchShared: typeof Themes = THEMES`). Only
+    `import type` may cross that boundary.
+
+    Two guards were added, because the compiler will not do it:
+    - a test that reads `src/main/preload.ts` and fails on any runtime import other than
+      `electron` (sabotage-tested: restoring the bad import fails it);
+    - `npm run check:preload` (`scripts/preload-sandbox-check.js`), which proves it at the
+      level that actually broke: it loads the **compiled** `dist/main/preload.js` with a
+      `Module._load` hook that allows only `electron`, then checks the bridge is exposed and
+      `data-theme` is applied.
+
+    **The palette.** The warm-sand scheme was replaced on request with Windows 11's own:
+    Light `#f3f3f3` page / `#ffffff` cards / `#005fb8` accent, Dark `#202020` / `#2b2b2b` /
+    `#60cdff`, and Dim interpolated between them on the same neutral ladder (`#2e2e2e` /
+    `#383838` / `#4cc2ff`). Three things fell out of it:
+    - the three pastel radial blooms went. They belonged to warm sand and would tint a
+      neutral grey; a Windows 11 window is a flat backdrop with cards standing on it.
+    - each mode sets `color-scheme`, or a dark window keeps light scrollbars and a light
+      drop-down list.
+    - controls have to stand *above* the card, not below it: `--bg` and `--surface` are now
+      lighter than `--card` in Dim and Dark, the way a Windows text box or button is.
+      Setting them a few steps darker made the inputs nearly invisible.
+
 ## 5 · Decisions worth not relitigating
 
 | Decision | Why |
@@ -857,7 +944,7 @@ Commits, oldest first:
 
 ## 6 · Current state
 
-- **330 tests pass**, 26 files. `npx vitest run`.
+- **341 tests pass**, 27 files. `npx vitest run`.
 - Renderer type-checks; UI harness builds; Electron launches clean.
 
 ### Paper corpus (`C:\ps\q-paper`)
@@ -918,10 +1005,13 @@ It is not caused by anything done this session.
 **This needs the user's decision** before implementing, because (a) changes coverage
 numbers and (c) leaves a known bad output in place. My recommendation is (a).
 
-### 2. Palette flash at startup — **closed**
+### 2. Palette flash at startup — **closed again**
 
-The colour picker is gone (item 24) and Warm sand is written straight into `:root`, so
-there is no stored choice to apply after the page loads and nothing to flash.
+Closed once by removing the colour picker (item 24). Item 34 brought a stored choice back
+(Light / Dim / Dark) and with it the risk. It is closed by reading the preference
+synchronously before the `BrowserWindow` is created, so `backgroundColor` is right from the
+first frame, and by applying `data-theme` from the **preload** script at `DOMContentLoaded`
+rather than from `renderer.js`, which as a module script runs after the first paint.
 
 ### 3. One paper unsupported by design
 

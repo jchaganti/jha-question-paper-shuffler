@@ -51,7 +51,7 @@ describe('option layouts that are read but reported', () => {
     });
 
     expect(issues(notes)).toEqual(['mixed-auto-and-typed-labels']);
-    expect(notes[0]!.detail).toContain('lettered by Word');
+    expect(notes[0]!.detail).toContain('Word is putting the label');
     expect(notes[0]!.detail).toContain('(B), (C), (D)');
   });
 
@@ -92,7 +92,7 @@ describe('option layouts that are read but reported', () => {
 
     expect(issues(notes)).toEqual(['several-lettered-lists']);
     expect(notes[0]!.detail).toContain('2 lettered lists');
-    expect(notes[0]!.detail).toContain('bracketed');
+    expect(notes[0]!.detail).toContain('one in brackets');
   });
 
   it('says nothing for a clean typed layout', async () => {
@@ -159,7 +159,7 @@ describe('grouping for display', () => {
     expect(groups.map((group) => group.issue)).toEqual(['mixed-auto-and-typed-labels', 'label-not-after-tab']);
     expect(groups[0]!.questionNumbers).toEqual([1, 4, 7]);
     expect(groups[0]!.fix).toBe('fix for mixed-auto-and-typed-labels');
-    expect(groups[0]!.label).toContain('lettered by Word');
+    expect(groups[0]!.label).toContain('come from Word');
   });
 
   it('counts a question once even when it carries several notes', () => {
@@ -246,8 +246,8 @@ describe('end to end', () => {
       .blocks.filter((block) => block.kind === 'table')
       .flatMap((block) => (block as { rows: readonly (readonly string[])[] }).rows)
       .flat();
-    expect(cells).toContain('Some options are lettered by Word and the rest typed by hand');
-    expect(cells.some((cell) => cell.includes('Letter all four options the same way'))).toBe(true);
+    expect(cells).toContain('Some labels come from Word and the rest were typed by hand');
+    expect(cells.some((cell) => cell.includes('Label all four options the same way'))).toBe(true);
   });
 
   it('leaves the section out of the report for a clean paper', async () => {

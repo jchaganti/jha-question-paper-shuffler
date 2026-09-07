@@ -94,7 +94,7 @@ describe('dryRun', () => {
     expect(warnings).not.toMatch(/names questions? 3,/);
     // Says why the numbers are foreign, because a list left over from a different paper is
     // by far the likeliest reason for one - and the numbers alone do not say that.
-    expect(warnings).toMatch(/left over from another one/);
+    expect(warnings).toMatch(/typed for a different paper/);
   });
 
   it('warns when no subject headings were recognised', async () => {
@@ -113,8 +113,8 @@ describe('dryRun', () => {
   });
 
   it('validates the request just like generate does', async () => {
-    await expect(service.dryRun(request({ setCount: 0 }))).rejects.toThrow(/between 2 and 100/);
-    await expect(service.dryRun(request({ setCount: 1 }))).rejects.toThrow(/at least two/);
+    await expect(service.dryRun(request({ setCount: 0 }))).rejects.toThrow(/between 2 and 26/);
+    await expect(service.dryRun(request({ setCount: 1 }))).rejects.toThrow(/just a copy of your paper/);
     await expect(
       service.dryRun(request({ shuffleQuestions: false, shuffleOptions: false })),
     ).rejects.toThrow(/at least one/);

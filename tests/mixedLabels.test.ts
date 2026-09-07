@@ -117,7 +117,7 @@ describe('options part lettered by Word and part typed', () => {
 
     const note = parsed.notes.find((item) => item.issue === 'mixed-auto-and-typed-labels');
     expect(note?.detail).toBe(
-      'The first, second, third options are lettered by Word, but (D) is typed into the text.',
+      'Word is putting the label on the first, second, third options, but (D) was typed in by hand.',
     );
   });
 

@@ -42,14 +42,15 @@ export function questionsPinnedByPictures(paper: ParsedPaper): PinnedQuestionGro
         questionNumbers: numbers,
         subject: section.subject,
         detail:
-          `A floating picture is anchored in the last paragraph of question ${block.printedNumber}, ` +
-          `so it is drawn over whatever follows it` +
-          `${next === undefined ? '' : ` - question ${next}`}. Moving either question away from ` +
-          'the other would take the picture with it, leaving one question without its artwork.',
+          `A picture is attached to the end of question ${block.printedNumber} but is drawn ` +
+          `below that point, over ${next === undefined ? 'what follows' : `question ${next}`}. ` +
+          'It may well be the picture for that next question. If the two questions were ' +
+          'separated, the picture would follow one of them and the other would lose its diagram.',
         fix:
-          `In Word, click the picture at the end of question ${block.printedNumber} and drag its ` +
-          'anchor marker into the question the picture illustrates - or set its Layout Options to ' +
-          '"In line with text", which anchors it exactly where it sits.',
+          `In Word, click the picture near question ${block.printedNumber}. A small anchor symbol ` +
+          'appears in the margin, showing which question it is attached to; drag that anchor into ' +
+          'the question the picture really belongs to. Simpler still, right-click the picture, ' +
+          'choose Wrap Text, then In Line with Text, which fixes it exactly where it sits.',
       });
     });
   }

@@ -56,12 +56,20 @@ export class OptionAdvisor {
 
         const referenceMatch = REFERENCES_OPTION.exec(optionText);
         if (referenceMatch) {
-          add('references-other-option', `Option text refers to another option: "${referenceMatch[0].trim()}"`);
+          add(
+            'references-other-option',
+            `One option points at another option: "${referenceMatch[0].trim()}". If the options ` +
+              'move, it would point at something else.',
+          );
           continue;
         }
         const catchAllMatch = CATCH_ALL.exec(optionText);
         if (catchAllMatch) {
-          add('catch-all-option', `Contains a catch-all option: "${catchAllMatch[0].trim()}"`);
+          add(
+            'catch-all-option',
+            `One option is "${catchAllMatch[0].trim()}", which only makes sense at the end of the ` +
+              'list. Shuffling would move it up among the others.',
+          );
           continue;
         }
         // The question type is read from the whole block, because the "Assertion:" and
@@ -70,9 +78,9 @@ export class OptionAdvisor {
         if (ASSERTION_REASON.test(blockText(block)) && !selfDescribing(options)) {
           add(
             'assertion-reason',
-            'Assertion-Reason / Statement-I-II question whose options do not say what they mean - ' +
-              'their wording is printed once as directions above. Moving them would change which ' +
-              'direction each option points at.',
+            'This is an Assertion-Reason (or Statement I / Statement II) question, and its ' +
+              'options do not spell out what they mean on their own - the wording is given once ' +
+              'in the directions above. Moving them would change what each one says.',
           );
         }
       }

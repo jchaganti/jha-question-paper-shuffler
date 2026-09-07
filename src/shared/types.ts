@@ -5,6 +5,7 @@
  */
 
 import type { AnswerStyle } from './answerStyle';
+import type { Theme } from './theme';
 
 /**
  * The four answer slots of a multiple-choice question.
@@ -36,10 +37,10 @@ export interface GenerationRequest {
    */
   readonly optionExclusions: readonly number[];
   /**
-   * Number of sets to generate, 2 to 100.
+   * Number of sets to generate: at least `MIN_SETS`, at most `MAX_SETS` (2 to 26).
    *
-   * At least two: a run of one produces a single shuffled paper with nothing to distinguish
-   * it from, which is not what this tool is for.
+   * At least two, because a run of one produces a single shuffled paper with nothing to
+   * distinguish it from. At most 26, because the sets are named Set A to Set Z.
    */
   readonly setCount: number;
   /**
@@ -385,6 +386,14 @@ export interface ProgressEvent {
 
 /** Contract exposed to the renderer through the preload bridge. */
 export interface ShufflerApi {
+  /**
+   * The appearance mode this window started in, already applied to <html> by the preload
+   * script. A plain value rather than a call, because the renderer needs it to set the
+   * drop-down and there is nothing to wait for.
+   */
+  readonly theme: Theme;
+  /** Remembers the mode for next time. Resolves false if it could not be saved. */
+  setTheme(theme: Theme): Promise<boolean>;
   pickSourceFile(): Promise<string | null>;
   inspect(sourceFile: string): Promise<Result<PaperSummary>>;
   dryRun(request: GenerationRequest): Promise<Result<DryRunReport>>;

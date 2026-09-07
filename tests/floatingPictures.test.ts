@@ -113,7 +113,7 @@ describe('a diagram anchored in front of an option label', () => {
 
     const note = parsed.notes.find((entry) => entry.issue === 'floating-picture-in-option-area');
     expect(note).toBeDefined();
-    expect(note!.fix).toMatch(/In line with text/);
+    expect(note!.fix).toMatch(/In Line with Text/);
   });
 });
 
@@ -207,6 +207,6 @@ describe('a picture wedged between the words of one answer', () => {
     if (parsed.ok) return;
     expect(parsed.reason).toBe('option-contains-floating-graphic');
     expect(parsed.detail).toMatch(/in the middle of its words/);
-    expect(parsed.fix).toMatch(/In line with text/);
+    expect(parsed.fix).toMatch(/In Line with Text/);
   });
 });

@@ -171,11 +171,13 @@ function tableRefusal(): Extract<OptionParseResult, { ok: false }> {
     ok: false,
     reason: 'options-inside-table',
     detail:
-      'The option labels are inside a table. An option is moved by moving its text along the ' +
-      'line it sits on, and a table cell is not a line of text.',
+      'The options of this question are in a table. To swap two options the tool moves their ' +
+      'text along the line they sit on, and text in a table is not on a line it can move ' +
+      'along.',
     fix:
-      'Select the table, then on the Layout tab choose Convert to Text, separating with tabs. ' +
-      'The options keep their columns on the page and can then be shuffled.',
+      'Click anywhere in the table. On the Layout tab (the one that appears at the right-hand ' +
+      'end when the cursor is in a table), click Convert to Text and choose Tabs. The options ' +
+      'will look the same on the page - still lined up in columns - and can then be shuffled.',
   };
 }
 
@@ -306,10 +308,11 @@ export class OptionBlockParser {
       return {
         ok: false,
         reason: 'options-not-found',
-        detail: 'Nothing follows the question stem - this question has no option paragraphs at all.',
+        detail: 'There is nothing at all below this question - no options were found under it.',
         fix:
-          'Check the question in Word. Its options are probably attached to the question above ' +
-          'or below it, or were deleted; type them under this question, one label per option.',
+          'Open the paper in Word and look at this question. Its options have probably ended up ' +
+          'under the question above or below it, or have been deleted. Put the four options ' +
+          'under this question, each one on its own line.',
       };
     }
 
@@ -407,9 +410,11 @@ export class OptionBlockParser {
       notes.push({
         issue: 'mixed-auto-and-typed-labels',
         detail:
-          `The ${positions} option${many ? 's are' : ' is'} lettered by Word, but ` +
-          `${found.map(shown).join(', ')} ${found.length > 1 ? 'are' : 'is'} typed into the text.`,
-        fix: 'Letter all four options the same way: either let Word letter all four, or type all four labels.',
+          `Word is putting the label on the ${positions} option${many ? 's' : ''}, but ` +
+          `${found.map(shown).join(', ')} ${found.length > 1 ? 'were' : 'was'} typed in by hand.`,
+        fix:
+          'Label all four options the same way: either let Word label all four, or type all four ' +
+          'labels yourself.',
       });
     }
 
@@ -418,10 +423,11 @@ export class OptionBlockParser {
       notes.push({
         issue: 'label-not-after-tab',
         detail:
-          `No tab in front of ${noTab.length === 1 ? 'label' : 'labels'} ` +
-          `${noTab.map(shown).join(', ')}, so ${noTab.length === 1 ? 'it was' : 'they were'} ` +
-          'read from the punctuation before it instead.',
-        fix: 'Press Tab before each option label, so the label always follows a tab.',
+          `There is no tab in front of ${noTab.length === 1 ? 'label' : 'labels'} ` +
+          `${noTab.map(shown).join(', ')}. The tool had to work out where ` +
+          `${noTab.length === 1 ? 'that option starts' : 'those options start'} from the ` +
+          'punctuation instead, which is a guess.',
+        fix: 'Press the Tab key before each option label, so every label follows a tab.',
       });
     }
 
@@ -429,7 +435,7 @@ export class OptionBlockParser {
     if (letterLabels.length === found.length && found.length > 1 && found.some((hit) => hit.upperCase !== found[0]!.upperCase)) {
       notes.push({
         issue: 'mixed-label-case',
-        detail: `The labels mix upper and lower case: ${found.map(shown).join(' ')}.`,
+        detail: `These labels mix capitals and small letters: ${found.map(shown).join(' ')}.`,
         fix: `Use the same case for all four labels - ${SCHEME_TOKENS[found[0]!.scheme].slice(0, 4).map((token) => `(${token})`).join(' ')}.`,
       });
     }
@@ -438,12 +444,14 @@ export class OptionBlockParser {
       notes.push({
         issue: 'floating-picture-in-option-area',
         detail:
-          `${anchoredPictures} floating picture(s) are anchored among the options. The options ` +
-          'were shuffled and each picture was left exactly where it is, because a floating ' +
-          'picture is placed from the page and does not travel with the text beside it.',
+          `${anchoredPictures} picture(s) float among the options - they are positioned against ` +
+          'the page rather than sitting in a line. The options were shuffled and every picture ' +
+          'was left exactly where it was, because a floating picture does not travel with the ' +
+          'text beside it.',
         fix:
-          'Check that no picture was meant to belong to one particular option. If one was, ' +
-          'select it and set Layout Options to "In line with text" so it moves with its option.',
+          'Check that none of these pictures was meant to belong to one particular option. If ' +
+          'one was, right-click it, choose Wrap Text, then In Line with Text, so it moves with ' +
+          'its option.',
       });
     }
 
@@ -470,10 +478,12 @@ export class OptionBlockParser {
       return {
         ok: false,
         reason: 'unexpected-label-sequence',
-        detail: 'The option labels were found, but could not be matched up with the text around them.',
+        detail:
+          'The four option labels are there, but the tool cannot work out where each option ' +
+          'begins and ends.',
         fix:
-          'Retype the option labels of this question: delete each "(A)" to "(D)" and type it ' +
-          'again, pressing Tab after each one.',
+          'Retype the labels of this question: delete each one and type it again, pressing Tab ' +
+          'after each label before the answer text.',
       };
     }
     const labelRanges = (located as { from: number; to: number }[]).map((range, i) => ({
@@ -499,7 +509,7 @@ export class OptionBlockParser {
         return {
           ok: false,
           reason: 'options-not-found',
-          detail: `Option ${shownLabel(option.slot)} is lettered by Word but its line is empty.`,
+          detail: `Word has put a label ${shownLabel(option.slot)} on a line, but the line is empty.`,
           fix: `Type the answer for option ${shownLabel(option.slot)} on that line, or delete the empty line.`,
         };
       }
@@ -512,12 +522,12 @@ export class OptionBlockParser {
         ok: false,
         reason: 'label-bracket-is-a-symbol',
         detail:
-          `The opening bracket of option ${shownLabel(OPTION_LETTERS.indexOf(symbolLabel))} came from a ` +
-          'picture font such as Wingdings. Those fonts hold drawings rather than letters, so that ' +
-          'bracket says nothing about what it is, and where the option before it ends cannot be told.',
+          `The bracket in front of option ${shownLabel(OPTION_LETTERS.indexOf(symbolLabel))} was put in ` +
+          'with Insert, Symbol, from a font of little drawings such as Wingdings. In the file it is ' +
+          'a drawing, not a bracket, so the tool cannot see where the option before it ends.',
         fix:
-          `Delete the label ${shownLabel(OPTION_LETTERS.indexOf(symbolLabel))} and type it again with ` +
-          'the keyboard. (A bracket from the ordinary Symbol font is read correctly and needs no change.)',
+          `Delete the label ${shownLabel(OPTION_LETTERS.indexOf(symbolLabel))} and simply type it ` +
+          'again on the keyboard.',
       };
     }
 
@@ -567,13 +577,13 @@ export class OptionBlockParser {
           ok: false,
           reason: floating ? 'option-contains-floating-graphic' : 'options-not-found',
           detail: floating
-            ? `Option ${shownLabel(i)} has no text of its own: this question's answers are ` +
-              'pictures, and each one is a floating picture placed from the page rather than ' +
-              'from the line it belongs to. Which picture is which option cannot be told.'
-            : `Option ${shownLabel(i)} has a label but nothing after it.`,
+            ? `The answers to this question are pictures, and option ${shownLabel(i)} has no text ` +
+              'of its own. Each picture floats: it is positioned against the page rather than ' +
+              'sitting in the line, so the tool cannot tell which picture belongs to which option.'
+            : `Option ${shownLabel(i)} has a label but nothing written after it.`,
           fix: floating
-            ? 'Click each option picture in turn, open Layout Options and choose "In line with ' +
-              'text", so that each picture sits on the line of the option it belongs to.'
+            ? 'Right-click each of the four pictures in turn, choose Wrap Text, then In Line with ' +
+              'Text. Each picture then sits in the line of its own option and travels with it.'
             : `Type the answer for option ${shownLabel(i)} after its label.`,
         };
       }
@@ -582,13 +592,14 @@ export class OptionBlockParser {
           ok: false,
           reason: 'option-spans-paragraphs',
           detail:
-            `Option ${shownLabel(i)} runs on to a paragraph of its own, because Enter was pressed ` +
-            'inside it. An option moves by having its text put on another label\'s line, and text ' +
-            'in a paragraph of its own has no line to move to.',
+            `Option ${shownLabel(i)} carries on to the line below, because Enter was pressed in ` +
+            'the middle of it. Word treats what follows Enter as a separate line of its own, and ' +
+            'the tool cannot move half an option.',
           fix:
-            'Put the cursor at the start of the continuation line and press Backspace to join it ' +
-            'up. If the option is meant to print on two lines, press Shift+Enter there instead of ' +
-            'Enter: it looks exactly the same and keeps the option in one paragraph.',
+            'Click at the very start of the line that carries on, and press Backspace to join it ' +
+            'back up. If you want the option printed on two lines, press Shift+Enter at that ' +
+            'point instead of Enter. It looks exactly the same on the page, but Word keeps the ' +
+            'option together as one line.',
         };
       }
       // Only a picture wedged *between* words of the answer is fatal: the words would move
@@ -598,11 +609,12 @@ export class OptionBlockParser {
           ok: false,
           reason: 'option-contains-floating-graphic',
           detail:
-            `Option ${shownLabel(i)} has a floating picture in the middle of its words. A floating ` +
-            'picture is placed from the page, so it would stay behind while the words moved.',
+            `Option ${shownLabel(i)} has a picture in the middle of its words, and that picture ` +
+            'floats: it is positioned against the page instead of sitting in the line. If the ' +
+            'option moved, the words would go and the picture would stay behind.',
           fix:
-            'Click that picture, open Layout Options and choose "In line with text". It then sits ' +
-            'in the line like a letter does, and travels with its option.',
+            'Right-click that picture, choose Wrap Text, then In Line with Text. The picture then ' +
+            'sits in the line like a letter does, and moves with the option.',
         };
       }
 
@@ -642,12 +654,13 @@ export class OptionBlockParser {
         ok: false,
         reason: 'options-not-found',
         detail:
-          'No option labels were found under this question - neither typed "(A)" to "(D)" nor a ' +
-          'lettered list of four made by Word.',
+          'No option labels were found under this question. There is text below it, but nothing ' +
+          'that reads as four labelled options.',
         fix:
-          'Check that this question has four options and that each one starts with its label. ' +
-          'The surest way is to select the four options and letter them with the numbering ' +
-          'button in Word, picking the "(A) (B) (C) (D)" style.',
+          'Check in Word that this question really has four options and that each one starts ' +
+          'with its own label. The surest way is to select the four options and click the ' +
+          'numbering button on the Home tab, choosing the "(A) (B) (C) (D)" style - Word then ' +
+          'keeps the labels right for you.',
       };
     }
 
@@ -670,13 +683,13 @@ export class OptionBlockParser {
           ok: false,
           reason: 'label-after-spaces-not-tab',
           detail:
-            `Option label${many ? 's' : ''} ${afterSpaces.map(labelAsTyped).join(', ')} ` +
-            `${many ? 'are' : 'is'} pushed across the page with a run of spaces instead of a tab. ` +
-            'A run of spaces looks exactly like ordinary text, so where the option before ' +
-            `${many ? 'each of them' : 'it'} ends cannot be told.`,
+            `Two options share a line here, and label${many ? 's' : ''} ` +
+            `${afterSpaces.map(labelAsTyped).join(', ')} ${many ? 'were' : 'was'} pushed across ` +
+            'the page by holding down the space bar. To the tool a row of spaces looks like ' +
+            'ordinary text, so it cannot see where the option before ends.',
           fix:
             `Delete the spaces in front of ${many ? 'each of these labels' : 'this label'} and ` +
-            'press Tab instead.',
+            'press the Tab key once instead. The page will look the same.',
         };
       }
     }
@@ -690,12 +703,14 @@ export class OptionBlockParser {
         ok: false,
         reason: 'option-contains-floating-graphic',
         detail:
-          `Only ${sequence.length === 0 ? 'no labels' : `"${sequence}"`} could be read here, because a ` +
-          'floating picture sits among the options and the words inside it cannot be told apart ' +
-          'from the option labels.',
+          `The tool could only read ${sequence.length === 0 ? 'none of the labels' : `"${sequence}"`} ` +
+          'here. A picture floats among the options - it is positioned against the page rather ' +
+          'than sitting in a line - and any words inside that picture get mixed up with the real ' +
+          'option labels.',
         fix:
-          'Click the picture, open Layout Options and choose "In line with text"; or, if it is a ' +
-          'diagram belonging to the question rather than to an option, move it above the options.',
+          'Right-click the picture, choose Wrap Text, then In Line with Text. If the picture is a ' +
+          'diagram for the question as a whole rather than for one option, move it above the ' +
+          'options instead.',
       };
     }
 
@@ -706,15 +721,15 @@ export class OptionBlockParser {
       ok: false,
       reason: 'unexpected-label-sequence',
       detail:
-        `This question should carry the labels ${expected}, but reading it gives "${sequence}"` +
-        `${missing.length > 0 ? ` - ${missing.map((token) => `(${token})`).join(' and ')} could not be found` : ''}` +
-        '. Either a label is missing or mistyped, or a label that is there belongs to something ' +
-        'else in the question.',
+        `This question should have the four labels ${expected}. The tool found "${sequence}"` +
+        `${missing.length > 0 ? ` and could not find ${missing.map((token) => `(${token})`).join(' or ')}` : ''}` +
+        '. Either a label is missing or mistyped, or something else in the question is being ' +
+        'mistaken for one.',
       fix:
-        `Check that this question has exactly four options labelled ${expected}, each label used ` +
-        'once, each at the start of its line or straight after a Tab. If the question also lists ' +
-        'statements for the reader to consider, give that list a different style from the answer ' +
-        'options, so that the two cannot be confused.',
+        `In Word, check that this question has exactly four options labelled ${expected}, each ` +
+        'label used once, and each label either at the start of its line or straight after a Tab. ' +
+        'If the question also gives the reader a list of statements to consider, label that list ' +
+        'differently - "1." or "(i) (ii)" - so it cannot be mistaken for the options.',
     };
   }
 }

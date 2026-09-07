@@ -11,11 +11,11 @@ import type { LayoutNoteGroup, OptionLayoutIssue, QuestionLayoutNote } from './t
 
 /** Plain-language heading for each issue, for someone who only types the paper. */
 export const LAYOUT_ISSUE_LABEL: Record<OptionLayoutIssue, string> = {
-  'mixed-auto-and-typed-labels': 'Some options are lettered by Word and the rest typed by hand',
+  'mixed-auto-and-typed-labels': 'Some labels come from Word and the rest were typed by hand',
   'label-not-after-tab': 'An option label has no tab in front of it',
-  'mixed-label-case': 'The four option labels mix capital and small letters',
-  'several-lettered-lists': 'More than one lettered list could have been the options',
-  'floating-picture-in-option-area': 'A floating picture sits among the options',
+  'mixed-label-case': 'The four option labels mix capitals and small letters',
+  'several-lettered-lists': 'Two lists here could have been the options',
+  'floating-picture-in-option-area': 'A picture floats among the options',
 };
 
 export function groupLayoutNotes(notes: readonly QuestionLayoutNote[]): LayoutNoteGroup[] {

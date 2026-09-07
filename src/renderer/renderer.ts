@@ -37,6 +37,8 @@ const statusLabel = el<HTMLElement>('status');
 const dryRunPanel = el<HTMLElement>('dry-run-panel');
 const resultsPanel = el<HTMLElement>('results');
 
+const themeSelect = el<HTMLSelectElement>('theme');
+
 const progressPanel = el<HTMLElement>('progress-panel');
 const progressSet = el<HTMLElement>('progress-set');
 const progressOverallBar = el<HTMLElement>('progress-overall-bar');
@@ -168,9 +170,9 @@ function renderLayoutNotes(paper: PaperSummary): void {
   const details = renderFinding(
     2,
     `${affected} question(s) shuffled, but worth correcting in the Word document`,
-    'These are shuffled correctly and their answers are right. The tool had to work their ' +
-      'option labels out from a layout that was not consistent — it can, but it should not ' +
-      'have to. Tidying them up in Word removes any doubt for the next paper.',
+    'These were all shuffled correctly and their answers are right. The tool had to work out ' +
+      'how their options were laid out, because it was not done the same way each time. It can ' +
+      'do that, but it is guessing. Tidying these up in Word means it never has to guess again.',
   );
   if (groups.length === 0) return;
 
@@ -249,9 +251,10 @@ function renderDryRun(report: DryRunReport): void {
     const details = renderFinding(
       1,
       `${report.optionsKeptByTool.length} question(s) whose options cannot be shuffled with certainty`,
-      'These questions could not be parsed, so they keep their original option order in every ' +
-        'set and their answer never changes. Each one below says what stopped it and what to ' +
-        'change in Word; see also "How to write the Word document" at the top of this window.',
+      'The tool could not read these questions properly, so it leaves their options exactly as ' +
+        'they are in every set, and their answers stay right. Each one below says what stopped ' +
+        'it and what to change in Word. There is more about this in "How to write the Word ' +
+        'document" at the top of this window.',
     );
     // Grouped by problem, with the fix stated once: a paper typed one way goes wrong the
     // same way many times over, and 24 copies of one paragraph bury the odd one out.
@@ -292,9 +295,10 @@ function renderDryRun(report: DryRunReport): void {
     const details = renderFinding(
       3,
       `${report.suggestedForExclusion.length} question(s) worth keeping in their original option order`,
-      'Their option text depends on its position, so shuffling can change the meaning ' +
-        '("None of these", "Both (A) and (B)"). Nothing is wrong with ' +
-        'them — this is your call, not the tool’s.',
+      'These options only make sense where they are — "None of these" belongs at the end, ' +
+        '"Both (A) and (B)" points at the two above it. Moving them could change what the ' +
+        'question means. Nothing is wrong with these questions; whether to shuffle them is your ' +
+        'decision, not the tool’s.',
     );
 
     const list = document.createElement('ul');
@@ -338,9 +342,10 @@ function renderDryRun(report: DryRunReport): void {
     const details = renderFinding(
       4,
       `${report.questionsKeptByTool.length} picture(s) anchored between two questions, holding them in place`,
-      'A floating picture is drawn downwards from the paragraph it is anchored to, so a ' +
-        'picture anchored at the end of one question can be the artwork of the next. Those ' +
-        'questions keep their original positions and everything else shuffles around them.',
+      'A picture attached to the end of one question is drawn below that point, so it often ' +
+        'turns out to be the diagram for the next question. Separating those two questions ' +
+        'would leave one of them without its picture, so they stay where they are and ' +
+        'everything else shuffles around them.',
     );
 
     const list = document.createElement('ul');
@@ -539,6 +544,20 @@ generateButton.addEventListener('click', async () => {
   }
   setStatus(`Done — ${result.value.sets.length} set(s) created.`);
   renderResults(result.value);
+});
+
+// --- appearance -----------------------------------------------------------------------
+
+// The preload script has already put the stored mode on <html>, so there is nothing to
+// apply here at startup - only the drop-down to line up with it.
+themeSelect.value = api.theme;
+themeSelect.addEventListener('change', () => {
+  const theme = themeSelect.value as typeof api.theme;
+  // Applied first: the page changes as the mouse leaves the menu, whatever the disk does.
+  document.documentElement.dataset.theme = theme;
+  void api.setTheme(theme).then((saved) => {
+    if (!saved) setStatus('The appearance was changed, but could not be saved for next time.', true);
+  });
 });
 
 api.onProgress(renderProgress);

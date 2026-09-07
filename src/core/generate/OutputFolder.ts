@@ -63,23 +63,32 @@ export function readableTimestamp(when: Date): string {
   );
 }
 
+const SET_LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
 /**
- * The name of a set: `A`, `B`, `C` ... `Z`, then `AA`, `AB` ... for a run past 26.
+ * The most sets one run can produce: 26, because that is how many letters there are.
  *
- * Sets are lettered rather than numbered because that is how a hall names them - "you have
- * Set B" - and because a set number invites confusion with a question number, which this
- * tool talks about constantly. Bijective base 26, so 26 is `Z` and 27 is `AA`; the largest
- * run the tool allows is 100 sets, which reaches `CV`.
+ * The alphabet is the limit rather than an arbitrary number, so every set has a name a
+ * person can say - "you have Set B" - and no run ever needs a two-letter name.
+ */
+export const MAX_SETS = SET_LETTERS.length;
+
+/** The fewest: two. A single set has nothing to be a set apart from. */
+export const MIN_SETS = 2;
+
+/**
+ * The name of a set: `A`, `B`, `C` ... `Z`.
+ *
+ * Sets are lettered rather than numbered because that is how a hall names them, and
+ * because a set *number* invites confusion with a question number - which this tool talks
+ * about constantly.
  */
 export function setSuffix(setNumber: number): string {
-  if (!Number.isInteger(setNumber) || setNumber < 1) {
-    throw new Error(`A set number must be a whole number from 1 upwards, not ${setNumber}.`);
+  const letter = Number.isInteger(setNumber) ? SET_LETTERS[setNumber - 1] : undefined;
+  if (letter === undefined) {
+    throw new Error(`A set number must be a whole number from 1 to ${MAX_SETS}, not ${setNumber}.`);
   }
-  let name = '';
-  for (let n = setNumber; n > 0; n = Math.floor((n - 1) / 26)) {
-    name = String.fromCharCode('A'.charCodeAt(0) + ((n - 1) % 26)) + name;
-  }
-  return name;
+  return letter;
 }
 
 /**

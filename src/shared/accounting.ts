@@ -74,10 +74,11 @@ export function accountFor(input: {
 export function staleListWarning(missing: readonly number[], field: string): string {
   const one = missing.length === 1;
   return (
-    `"${field}" names ${one ? 'question' : 'questions'} ${missing.join(', ')}, which this ` +
-    `paper does not have, so ${one ? 'it has' : 'they have'} no effect. A question number ` +
-    'only means something in the paper it came from: check the list belongs to this paper, ' +
-    'and clear anything left over from another one.'
+    `"${field}" lists ${one ? 'question' : 'questions'} ${missing.join(', ')}, but this paper ` +
+    `has no such question ${one ? 'number' : 'numbers'}, so ${one ? 'it does' : 'they do'} ` +
+    'nothing. Question numbers only mean something in the paper they came from, so this list ' +
+    'was most likely typed for a different paper. Clear out anything that does not belong to ' +
+    'this one.'
   );
 }
 

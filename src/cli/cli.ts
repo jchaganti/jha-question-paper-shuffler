@@ -35,7 +35,7 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
   const file = typeof args.file === 'string' ? args.file : '';
   if (!file) {
-    console.error('Usage: --file <paper.docx> [--sets N (2-100, default 2)] [--shuffle-questions] [--shuffle-options]');
+    console.error('Usage: --file <paper.docx> [--sets N (2-26, default 2)] [--shuffle-questions] [--shuffle-options]');
     console.error('       [--keep-question-positions 1,2] [--keep-option-order 3,4] [--seed text]');
     console.error('       [--allow-page-splits] [--inspect] [--dry-run]');
     process.exitCode = 2;
@@ -59,11 +59,11 @@ async function main(): Promise<void> {
     }
     console.log(`\nReview suggested (${summary.advisories.length}):`);
     for (const item of summary.advisories) {
-      console.log(`  Q${item.questionNumber} [${item.subject}] ${item.kind}: ${item.detail}`);
+      console.log(`  Q${item.questionNumber} [${item.subject}] ${item.detail}`);
     }
     console.log(`\nShuffled, but worth correcting in the Word document (${summary.layoutNotes.length}):`);
     for (const item of summary.layoutNotes) {
-      console.log(`  Q${item.questionNumber} [${item.subject}] ${item.issue}: ${item.detail}`);
+      console.log(`  Q${item.questionNumber} [${item.subject}] ${item.detail}`);
     }
     return;
   }
@@ -113,9 +113,10 @@ async function main(): Promise<void> {
     console.log(
       `\n1. ${report.optionsKeptByTool.length} question(s) whose options cannot be shuffled with certainty.`,
     );
-    console.log('   These questions could not be read, so they keep their original option order');
-    console.log('   and their answer is unchanged. Each problem is listed once, with the questions');
-    console.log('   it affects and what to change in Word.');
+    console.log('   The tool could not read these questions properly, so it leaves their options');
+    console.log('   exactly as they are and their answers stay right. Nothing here is broken in');
+    console.log('   your paper - it just needs tidying in Word. Each problem is listed once, with');
+    console.log('   the questions it affects and what to change.');
     // Grouped by problem: a paper typed one way goes wrong the same way many times over, and
     // the fix is worth reading once rather than once per question.
     for (const group of report.paper.unshufflableGroups) {
@@ -134,8 +135,9 @@ async function main(): Promise<void> {
     const groups = report.paper.layoutNoteGroups;
     const affected = questionsWithLayoutNotes(report.paper.layoutNotes);
     console.log(`\n2. ${affected.length} question(s) shuffled, but worth correcting in the Word document.`);
-    console.log('   These were shuffled correctly; their layout had to be worked out, so correcting');
-    console.log('   the source removes the guesswork next time.');
+    console.log('   These were shuffled correctly and their answers are right. The tool had to work');
+    console.log('   out how they were laid out, which is a guess. Tidying them in Word means it');
+    console.log('   never has to guess again.');
     for (const group of groups) {
       console.log(`     ${group.label}`);
       console.log(`       questions: ${group.questionNumbers.join(', ')}`);
@@ -145,9 +147,13 @@ async function main(): Promise<void> {
     console.log(
       `\n3. ${report.suggestedForExclusion.length} question(s) worth keeping in their original option order.`,
     );
-    console.log('   Their option text looks position-dependent, so shuffling may change what it means.');
+    console.log('   These options only make sense where they are - "None of these", "Both (A) and');
+    console.log('   (B)" - so moving them could change what the question means. Nothing is wrong');
+    console.log('   with them; this one is your decision.');
     for (const item of report.suggestedForExclusion) {
-      console.log(`     Q${item.questionNumber} [${item.subject}] ${item.kind}: ${item.detail}`);
+      // No `kind` here: it is a name for the code to switch on, and the detail already says
+      // in words what the kind stands for.
+      console.log(`     Q${item.questionNumber} [${item.subject}] ${item.detail}`);
     }
     if (report.suggestedForExclusion.length > 0) {
       console.log(`\n     --keep-option-order ${report.suggestedForExclusion.map((i) => i.questionNumber).join(',')}`);
@@ -159,7 +165,9 @@ async function main(): Promise<void> {
     console.log(
       `\n4. ${report.questionsKeptByTool.length} picture(s) anchored between two questions, holding them in place.`,
     );
-    console.log('   These questions keep their original positions; everything else shuffles around them.');
+    console.log('   A picture attached to the end of one question is often the diagram for the next');
+    console.log('   one. To be safe, these questions stay where they are and the rest shuffle');
+    console.log('   around them.');
     for (const group of report.questionsKeptByTool) {
       console.log(`     Q${group.questionNumbers.join(', Q')} [${group.subject}] ${group.detail}`);
       console.log(`       fix: ${group.fix}`);

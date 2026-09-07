@@ -33,12 +33,12 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
         ok: false,
         reason: 'options-not-found',
         detail:
-          'No option labels were found under this question - neither typed "(A)" to "(D)" nor a ' +
-          'lettered list made by Word.',
+          'No option labels were found under this question - neither labels typed in by hand nor ' +
+          'labels put there by Word.',
         fix:
-          'Check that this question has four options and that each one starts with its label. ' +
-          'The surest way is to select the four options and letter them with the numbering ' +
-          'button in Word, picking the "(A) (B) (C) (D)" style.',
+          'Check in Word that this question really has four options and that each one starts ' +
+          'with its own label. The surest way is to select the four options and click the ' +
+          'numbering button on the Home tab, choosing the "(A) (B) (C) (D)" style.',
       };
     }
 
@@ -49,12 +49,12 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
         ok: false,
         reason: 'unexpected-option-count',
         detail:
-          `This question's options are lettered by Word, but the list has ${sizes} items rather ` +
-          'than four. Every question must offer exactly four options for the answer key to keep ' +
+          `Word is putting the labels on this question's options, but it is labelling ${sizes} ` +
+          'lines, not four. Every question needs exactly four options, or the answer key stops ' +
           'meaning what it says.',
         fix:
-          'Count the options in Word. If one is missing, type it; if an extra line was swept into ' +
-          'the list by mistake, select it and turn the lettering off for that line.',
+          'Count the options in Word. If one is missing, type it. If an extra line has been ' +
+          'caught up in the list by mistake, click that line and switch the numbering off for it.',
       };
     }
 
@@ -68,11 +68,11 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
             {
               issue: 'several-lettered-lists',
               detail:
-                `This question has ${rightSize.length} lettered lists of four items; the ` +
-                `${candidates[0]!.bracketed ? 'bracketed' : 'upper case'} one was taken as the options.`,
+                `This question has ${rightSize.length} lettered lists of four lines. The tool used ` +
+                `the ${candidates[0]!.bracketed ? 'one in brackets' : 'one in capitals'} as the options.`,
               fix:
-                'Letter only the options with a bracketed "(A) (B) (C) (D)" list, and give any other ' +
-                'lettered list a different style, such as "A." or "(i) (ii)".',
+                'Use the "(A) (B) (C) (D)" style for the options only. Give any other list in the ' +
+                'question a different style, such as "1." or "(i) (ii)".',
             },
           ]
         : [];
@@ -81,12 +81,12 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
         ok: false,
         reason: 'ambiguous-option-list',
         detail:
-          `This question has ${candidates.length} lettered lists of four, written the same way, so ` +
-          'which of them is the answer options cannot be told - the other is presumably a list of ' +
-          'statements the question asks about.',
+          `This question has ${candidates.length} lettered lists of four lines, both written the ` +
+          'same way, so the tool cannot tell which one holds the answers. The other is probably a ' +
+          'list of statements the question asks about.',
         fix:
-          'Letter only the answer options with a bracketed "(A) (B) (C) (D)" list. Give the other ' +
-          'list a different style - "A." or "(i) (ii) (iii) (iv)" - so the two cannot be confused.',
+          'Use the "(A) (B) (C) (D)" style for the answer options only. Give the other list a ' +
+          'different style - "1." or "(i) (ii) (iii) (iv)" - so the two cannot be confused.',
       };
     }
 
@@ -107,13 +107,13 @@ export class AutoLetteredOptionParser implements IOptionSetParser {
           ok: false,
           reason: floating ? 'option-contains-floating-graphic' : 'options-not-found',
           detail: floating
-            ? `Option ${'ABCD'[i] ?? i + 1} has no text of its own: this question's answers are ` +
-              'pictures, and each one is a floating picture placed from the page rather than ' +
-              'from the line it belongs to. Which picture is which option cannot be told.'
-            : `Option ${'ABCD'[i] ?? i + 1} is lettered by Word but its line is empty.`,
+            ? `The answers to this question are pictures, and option ${'ABCD'[i] ?? i + 1} has no ` +
+              'text of its own. Each picture floats: it is positioned against the page rather than ' +
+              'sitting in the line, so the tool cannot tell which picture belongs to which option.'
+            : `Word has put a label on this line for option ${'ABCD'[i] ?? i + 1}, but the line is empty.`,
           fix: floating
-            ? 'Click each option picture in turn, open Layout Options and choose "In line with ' +
-              'text", so that each picture sits on the line of the option it belongs to.'
+            ? 'Right-click each of the four pictures in turn, choose Wrap Text, then In Line with ' +
+              'Text. Each picture then sits in the line of its own option and travels with it.'
             : `Type the answer for option ${'ABCD'[i] ?? i + 1} on that line, or delete the empty line.`,
         };
       }

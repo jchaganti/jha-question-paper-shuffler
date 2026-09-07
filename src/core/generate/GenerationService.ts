@@ -31,7 +31,14 @@ import { FALLBACK_SUBJECT, type ParsedPaper, type PaperSection } from '../parse/
 import { ShufflePlanner, resolveSeed } from '../shuffle/ShufflePlanner';
 import { SetVerifier } from '../verify/SetVerifier';
 import { OptionAdvisor } from './OptionAdvisor';
-import { OutputFolderResolver, setDisplayName, setFileName, setLabel } from './OutputFolder';
+import {
+  MAX_SETS,
+  MIN_SETS,
+  OutputFolderResolver,
+  setDisplayName,
+  setFileName,
+  setLabel,
+} from './OutputFolder';
 import { ReportWriter } from './ReportWriter';
 import { SetBuilder } from './SetBuilder';
 
@@ -279,12 +286,17 @@ export class GenerationService {
     if (path.extname(request.sourceFile).toLowerCase() !== '.docx') {
       throw new Error('The question paper must be a .docx file (Word 2007 or later).');
     }
-    // At least two: one set is the paper the user already has, and generating a single
-    // "shuffled" paper invites handing it out as if it were a set of several.
-    if (!Number.isInteger(request.setCount) || request.setCount < 2 || request.setCount > 100) {
+    // At least two, because one set is not a set of anything; at most 26, because the sets
+    // are named by letter and that is how many letters there are.
+    if (
+      !Number.isInteger(request.setCount) ||
+      request.setCount < MIN_SETS ||
+      request.setCount > MAX_SETS
+    ) {
       throw new Error(
-        'Number of sets must be a whole number between 2 and 100. There is nothing to ' +
-          'compare a single set against - generate at least two.',
+        `Enter a whole number of sets between ${MIN_SETS} and ${MAX_SETS}. One set on its ` +
+          'own is just a copy of your paper, and the sets are named Set A to Set Z, so ' +
+          `${MAX_SETS} is as many as can be named.`,
       );
     }
     if (!request.shuffleQuestions && !request.shuffleOptions) {

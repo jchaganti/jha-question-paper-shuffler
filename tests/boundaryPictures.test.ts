@@ -59,7 +59,7 @@ describe('finding the pictures anchored across a question boundary', () => {
     expect(pinned[0]!.subject).toBe('PHYSICS');
     expect(pinned[0]!.detail).toContain('question 3');
     expect(pinned[0]!.detail).toContain('question 4');
-    expect(pinned[0]!.fix).toContain('In line with text');
+    expect(pinned[0]!.fix).toContain('In Line with Text');
   });
 
   it('holds only itself when the picture is at the end of the last question', async () => {

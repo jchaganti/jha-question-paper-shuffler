@@ -87,7 +87,7 @@ describe('an Assertion-Reason question printed with its wording as directions', 
     });
 
     expect(advisories.map((item) => item.kind)).toEqual(['assertion-reason']);
-    expect(advisories[0]!.detail).toMatch(/do not say what they mean/);
+    expect(advisories[0]!.detail).toMatch(/do not spell out what they mean/);
   });
 });
 

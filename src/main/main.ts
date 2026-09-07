@@ -9,19 +9,31 @@ import type {
   ProgressEvent,
   Result,
 } from '../shared/types';
+import { THEME_PAGE_COLOUR, asTheme, type Theme } from '../shared/theme';
 import { IPC } from './channels';
+import { PreferencesStore } from './Preferences';
 
 const service = new GenerationService();
 let mainWindow: BrowserWindow | undefined;
+let preferences: PreferencesStore | undefined;
+
+/** The store, created on first use: `app.getPath` is only valid once Electron is ready. */
+function store(): PreferencesStore {
+  preferences ??= new PreferencesStore(app.getPath('userData'));
+  return preferences;
+}
 
 function createWindow(): void {
+  // Read before the window exists, so the very first frame is painted in the colour the
+  // user chose last time. Applying it afterwards would show a flash of the wrong theme.
+  const theme = store().read().theme;
   mainWindow = new BrowserWindow({
     width: 1040,
     height: 900,
     minWidth: 720,
     minHeight: 600,
     title: 'Question Paper Shuffler',
-    backgroundColor: '#f5f6f8',
+    backgroundColor: THEME_PAGE_COLOUR[theme],
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -69,6 +81,21 @@ ipcMain.handle(IPC.generate, (event, request: GenerationRequest): Promise<Result
 
 ipcMain.handle(IPC.revealFolder, async (_event, folder: string): Promise<void> => {
   await shell.openPath(folder);
+});
+
+// Synchronous on purpose: the preload script needs the answer before the page paints.
+ipcMain.on(IPC.readTheme, (event) => {
+  event.returnValue = store().read().theme;
+});
+
+ipcMain.handle(IPC.writeTheme, (_event, value: unknown): boolean => {
+  const theme: Theme | undefined = asTheme(value);
+  if (theme === undefined) return false;
+  const saved = store().write({ theme });
+  // The window keeps its own background colour for the life of the window; setting it here
+  // too means a resize or a maximise never flashes the previous theme behind the page.
+  if (saved) mainWindow?.setBackgroundColor(THEME_PAGE_COLOUR[theme]);
+  return saved;
 });
 
 app.whenReady().then(

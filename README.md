@@ -32,6 +32,22 @@ question can be shuffled* — plain-language authoring guidance for whoever type
 It is the practical version of the assumptions listed further down this file; the dry run
 points at it whenever it has to skip a question.
 
+### Light, Dim and Dark
+
+The **Appearance** drop-down at the top right switches between three modes. Light and
+Dark are **Windows 11's own** colours — the Fluent neutrals and accent blue used by
+Settings, File Explorer and every other built-in app — so the window looks like part of the
+system. Dim sits between them: the same neutral family lifted off Dark's near-black to a
+mid grey, for a lit room in the evening.
+
+Each mode also sets `color-scheme`, so the parts Windows draws for itself — scrollbars, the
+list the drop-down opens, the caret — come up in the same mode as the page.
+
+The choice is remembered in `preferences.json` in the app's own data folder, read *before*
+the window is created and applied by the preload script, so there is no flash of the wrong
+colours at startup. Windows' own light/dark setting is no longer consulted: an explicit
+choice must win over it.
+
 ### The two buttons
 
 **Dry run** writes nothing. It reports how many questions are free to move and how many
@@ -108,7 +124,7 @@ the shuffler, the tests, the CLI — works without Electron.)
 npm test
 ```
 
-330 unit and end-to-end tests. They build question papers in memory (see
+341 unit and end-to-end tests. They build question papers in memory (see
 `tests/support/PaperFixture.ts`), so they run without any sample document.
 
 To review the UI without Electron and without a real paper:
@@ -210,7 +226,7 @@ regenerated; `npm run pack` and `npm run dist` both refresh it first.
 | Keep these question numbers in place | Comma separated printed question numbers (`10,11,19,20`). Ranges like `10-14` also work. These questions stay at their exact position. |
 | Shuffle option order | Permutes the four option contents of each question. |
 | Keep the option order of these questions | Comma separated printed question numbers whose options must not move. Use it for "None of these", "Both (A) and (B)", or any question where option order carries meaning. |
-| Number of sets | 2–100. One set is refused: there is nothing to tell a single "shuffled" paper apart from, and it invites handing it out as though it were one of several. |
+| Number of sets | 2–26. One set is refused — on its own it is just a copy of your paper. 26 is the ceiling because the sets are named Set A to Set Z. |
 | Seed | Optional — see below. Leave it blank for a normal run. |
 | Keep each question on one page | On by default. A question that no longer fits at the bottom of a page starts on the next page instead of being split across two. See below. |
 

@@ -100,7 +100,7 @@ describe('two options on one line pushed apart with spaces instead of a tab', ()
     if (parsed.ok) return;
     expect(parsed.reason).toBe('label-after-spaces-not-tab');
     expect(parsed.detail).toContain('(B), (D)');
-    expect(parsed.fix).toContain('press Tab');
+    expect(parsed.fix).toContain('press the Tab key');
   });
 
   it('is not blamed when the space run does not account for every option', async () => {
@@ -280,6 +280,6 @@ describe('failure messages', () => {
     expect(parsed.ok).toBe(false);
     if (parsed.ok) return;
     expect(parsed.reason).toBe('option-contains-floating-graphic');
-    expect(parsed.detail).toContain('floating picture');
+    expect(parsed.detail).toContain('A picture floats among the options');
   });
 });

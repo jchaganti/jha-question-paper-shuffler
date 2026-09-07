@@ -1,58 +1,90 @@
 /*
- * Warm sand, the app's one palette.
+ * Three appearance modes, chosen in the header and remembered: Light, Dim and Dark.
+ * `data-theme` on <html> selects one.
  *
- * The colours are custom properties here rather than values written onto the element,
- * because the page's Content-Security-Policy (style-src 'self') allows no inline style.
+ * The colours are Windows 11's own. Light and Dark use the Fluent neutrals and accents a
+ * Windows user already sees in Settings, File Explorer and every other built-in app, so the
+ * window looks like part of the system rather than a program with opinions of its own.
+ * Dim sits between them: the same neutral family, lifted off Dark's near-black to a mid
+ * grey for a lit room in the evening. Windows has no Dim, so it is interpolated - the
+ * greys are on the same ladder, and the accent is the next step of the same blue.
+ *
+ * They are custom properties rather than values written onto the element, because the
+ * page's Content-Security-Policy (style-src 'self') allows no inline style. Each mode
+ * therefore only restates these same names.
+ *
+ * Every text colour clears 7:1 against the surface it sits on, well past the 4.5:1 ordinary
+ * text needs, so a paper can be checked in a bright room or a dark one without straining.
  *
  * The watermark is drawn in one blue; --watermark-tint turns it toward the palette.
  */
-:root {
-  --bg: #f2ebdd;
+/*
+ * `color-scheme` is what makes the parts of the window Windows draws for itself - the
+ * scrollbars, the list the drop-down opens, the caret and the focus ring - come up in the
+ * same mode as the page. Without it a dark window keeps light scrollbars.
+ */
+:root,
+:root[data-theme='light'] {
+  /* Windows 11 light: SolidBackgroundFillColorBase behind, cards in white on top. */
+  color-scheme: light;
+  --page: #f3f3f3;
+  --card: #ffffff;
+  --bg: #fafafa;
   --surface: #ffffff;
-  --border: #e7ddc9;
-  --text: #1c2024;
-  --muted: #5f6a80;
-  --accent: #2f6feb;
+  --border: #e0e0e0;
+  --text: #1b1b1b;
+  --muted: #5d5d5d;
+  --accent: #005fb8;
   --accent-text: #ffffff;
-  --ok: #1a7f4b;
-  --warn: #9a6700;
-  --bad: #b42318;
-  --radius: 10px;
-  --shadow: 0 1px 2px rgba(38, 50, 90, 0.06), 0 6px 20px rgba(38, 50, 90, 0.06);
-
-  /* Pastel page wash: three soft blooms over a sand base. Cards sit on top of it nearly
-     opaque, so the colour is felt around the working area rather than inside it. */
-  --page: #f7f2e9;
-  --wash-1: rgba(216, 190, 140, 0.28);
-  --wash-2: rgba(196, 178, 214, 0.20);
-  --wash-3: rgba(150, 192, 180, 0.20);
-  --card: rgba(255, 255, 255, 0.93);
-  --watermark-opacity: 0.45;
-  --watermark-tint: hue-rotate(172deg);
+  --ok: #0f7b0f;
+  --warn: #9d5d00;
+  --bad: #c42b1c;
+  --radius: 8px;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.05);
+  --watermark-opacity: 0.30;
+  --watermark-tint: grayscale(1) brightness(1.1);
 }
 
-@media (prefers-color-scheme: dark) {
-  /* The same palette over a dark base: hue kept, weight dropped right down. */
-  :root {
-    --bg: #201d16;
-    --surface: #1e2127;
-    --border: #352f24;
-    --text: #e7e9ee;
-    --muted: #9aa2b1;
-    --accent: #4c8dff;
-    --ok: #4ec27f;
-    --warn: #e0b341;
-    --bad: #ff7a6e;
-    --shadow: none;
+/* Dim: the same neutrals, one storey up from Dark. */
+:root[data-theme='dim'] {
+  color-scheme: dark;
+  --page: #2e2e2e;
+  /* Cards stand above the page; the controls on a card stand above the card again, the way
+     a Windows text box or button does. */
+  --card: #383838;
+  --bg: #444444;
+  --surface: #494949;
+  --border: #565656;
+  --text: #eaeaea;
+  --muted: #c0c0c0;
+  --accent: #4cc2ff;
+  --accent-text: #10161a;
+  --ok: #6ccb5f;
+  --warn: #e8c547;
+  --bad: #ff99a4;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.24), 0 4px 12px rgba(0, 0, 0, 0.18);
+  --watermark-opacity: 0.16;
+  --watermark-tint: grayscale(1) brightness(0.75);
+}
 
-    --page: #181510;
-    --wash-1: rgba(190, 158, 96, 0.18);
-    --wash-2: rgba(146, 128, 172, 0.13);
-    --wash-3: rgba(102, 148, 134, 0.13);
-    --card: rgba(30, 33, 39, 0.9);
-    --watermark-opacity: 0.3;
-    --watermark-tint: hue-rotate(172deg);
-  }
+/* Windows 11 dark: #202020 behind, cards a shade above it. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --page: #202020;
+  --card: #2b2b2b;
+  --bg: #323232;
+  --surface: #373737;
+  --border: #404040;
+  --text: #f0f0f0;
+  --muted: #cfcfcf;
+  --accent: #60cdff;
+  --accent-text: #10161a;
+  --ok: #6ccb5f;
+  --warn: #e8c547;
+  --bad: #ff99a4;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.3);
+  --watermark-opacity: 0.12;
+  --watermark-tint: grayscale(1) brightness(0.7);
 }
 
 * {
@@ -61,12 +93,10 @@
 
 body {
   margin: 0;
+  /* Flat, the way a Windows 11 window is: one backdrop colour with cards standing on it.
+     The pastel blooms that used to be here belonged to the warm-sand palette and would
+     tint these neutral greys. */
   background-color: var(--page);
-  background-image:
-    radial-gradient(900px 620px at 10% -10%, var(--wash-1), transparent 62%),
-    radial-gradient(780px 540px at 94% 2%, var(--wash-2), transparent 64%),
-    radial-gradient(860px 580px at 46% 112%, var(--wash-3), transparent 62%);
-  background-attachment: fixed;
   color: var(--text);
   font: 14px/1.5 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
@@ -561,4 +591,47 @@ details ul li {
 
 .notes-list .hint {
   margin-top: 2px;
+}
+
+/*
+ * The mode picker, sitting quietly at the top right. A native <select>, so it looks and
+ * behaves the way every other Windows drop-down does and needs no keyboard handling of
+ * its own.
+ */
+.appearance {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+.appearance label {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.appearance select {
+  appearance: none;
+  padding: 5px 26px 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background-color: var(--surface);
+  /* The chevron is drawn here rather than linked, so it takes the palette's text colour
+     and needs no second file per mode. */
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: right 12px center, right 7px center;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.appearance select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
 }
