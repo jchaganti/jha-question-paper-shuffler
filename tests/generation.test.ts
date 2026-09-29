@@ -337,9 +337,22 @@ describe('GenerationService', () => {
     const before = await DocxPackage.fromBuffer(await fs.readFile(sourceFile));
     const after = await DocxPackage.fromBuffer(await fs.readFile(result.sets[0]!.filePath));
 
-    for (const part of ['[Content_Types].xml', '_rels/.rels', 'word/_rels/document.xml.rels', 'word/numbering.xml']) {
+    for (const part of ['_rels/.rels', 'word/numbering.xml']) {
       expect(after.getPartText(part), part).toBe(before.getPartText(part));
     }
+
+    // Printing the set name at the top of every page needs page headers, which this paper
+    // has none of. So two are added - one for page one, one for the rest - and the two
+    // parts that list what a document contains gain exactly one entry each per header.
+    const withoutHeaders = (part: string, pattern: RegExp): string =>
+      after.getPartText(part)!.replace(pattern, '');
+
+    expect(withoutHeaders('[Content_Types].xml', /<Override PartName="\/word\/header\d+\.xml"[^>]*\/>/g)).toBe(
+      before.getPartText('[Content_Types].xml'),
+    );
+    expect(withoutHeaders('word/_rels/document.xml.rels', /<Relationship [^>]*Target="header\d+\.xml"\/>/g)).toBe(
+      before.getPartText('word/_rels/document.xml.rels'),
+    );
   });
 
   it('rejects invalid input', async () => {

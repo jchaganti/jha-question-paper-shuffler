@@ -38,11 +38,19 @@ export interface PaperSection {
   readonly label: string;
   /**
    * The paragraph that announces the *subject*, when the paper has one - carried by the
-   * first division only, since that is the one that starts a new page. Absent when no
+   * first division only, since that is the division the heading opens. Absent when no
    * subject heading was recognised and the whole paper is treated as a single section -
    * in that case `headerNodes` opens with the paper's own title, which is not a subject.
    */
   readonly headingNode?: Element;
+  /**
+   * The paragraph that announces the *division* - "SECTION B" - carried by the divisions
+   * that do not open their subject, since the first division of a subject is opened by the
+   * subject heading above it. Absent when the subject is undivided.
+   *
+   * Like `headingNode`, this is the paragraph that starts a new page.
+   */
+  readonly divisionNode?: Element;
   /** Subject and division headings plus anything before the first question (kept in place). */
   readonly headerNodes: Element[];
   readonly blocks: QuestionBlock[];

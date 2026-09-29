@@ -11,7 +11,7 @@ import { NumberingIndex } from '../src/core/parse/NumberingIndex';
 import { PaperParser, isEmptyParagraph } from '../src/core/parse/PaperParser';
 import type { ParsedPaper } from '../src/core/parse/PaperModel';
 import type { GenerationRequest } from '../src/shared/types';
-import { buildPaper, defaultSections, plainParagraphXml } from './support/PaperFixture';
+import { buildPaper, defaultSections, plainParagraphXml, type FixtureSection } from './support/PaperFixture';
 import { pdfText } from './support/pdfText';
 
 let workingDir = '';
@@ -39,6 +39,24 @@ const has = (paragraph: Element, flag: string): boolean => {
   const pPr = firstChild(paragraph, NS.w, 'pPr');
   return !!pPr && !!firstChild(pPr, NS.w, flag);
 };
+
+/**
+ * One subject whose last three questions sit in a "SECTION B" division of their own - the
+ * "all questions compulsory, now attempt any 10" shape real papers use.
+ */
+function dividedPaper(subject = 'PHYSICS'): FixtureSection[] {
+  const questions = defaultSections().flatMap((section) => section.questions);
+  return [
+    {
+      subject,
+      startNumber: 1,
+      numId: '1',
+      questions: questions.map((question, index) =>
+        index === 4 ? { ...question, headingBefore: 'SECTION B (Attempt any 10 questions)' } : question,
+      ),
+    },
+  ];
+}
 
 /** Paragraphs of a question, in reading order, tables included. */
 function paragraphsOf(nodes: readonly Element[]): Element[] {
@@ -245,11 +263,11 @@ describe('the answer key starts a page of its own', () => {
   });
 });
 
-describe('each subject starts a page of its own', () => {
+describe('each subject and each division of one starts a page of its own', () => {
   it('marks every subject except the one that opens the document', async () => {
     const paper = await parse(await fs.readFile(sourceFile));
     // PHYSICS is the first node of the body; CHEMISTRY follows Physics mid-page.
-    expect(new PageFlowGuard().subjectsOnNewPage(paper)).toBe(1);
+    expect(new PageFlowGuard().sectionsOnNewPage(paper)).toBe(1);
 
     const [physics, chemistry] = paper.sections;
     expect(has(physics!.headingNode!, 'pageBreakBefore')).toBe(false);
@@ -261,7 +279,7 @@ describe('each subject starts a page of its own', () => {
     const buffer = await buildPaper(defaultSections(), { beforeFirstSubject: plainParagraphXml('MODEL TEST PAPER') });
     const paper = await parse(buffer);
 
-    expect(new PageFlowGuard().subjectsOnNewPage(paper)).toBe(2);
+    expect(new PageFlowGuard().sectionsOnNewPage(paper)).toBe(2);
     expect(has(paper.sections[0]!.headingNode!, 'pageBreakBefore')).toBe(true);
   });
 
@@ -281,7 +299,7 @@ describe('each subject starts a page of its own', () => {
     expect(paper.sections).toHaveLength(1);
     expect(paper.sections[0]!.subject).toBe('ALL');
     expect(paper.sections[0]!.headingNode).toBeUndefined();
-    expect(new PageFlowGuard().subjectsOnNewPage(paper)).toBe(0);
+    expect(new PageFlowGuard().sectionsOnNewPage(paper)).toBe(0);
     expect(has(paper.sections[0]!.headerNodes[0]!, 'pageBreakBefore')).toBe(false);
   });
 
@@ -291,15 +309,15 @@ describe('each subject starts a page of its own', () => {
     });
     const paper = await parse(buffer);
 
-    expect(new PageFlowGuard().subjectsOnNewPage(paper)).toBe(0);
+    expect(new PageFlowGuard().sectionsOnNewPage(paper)).toBe(0);
     expect(has(paper.sections[1]!.headingNode!, 'pageBreakBefore')).toBe(false);
   });
 
   it('is idempotent', async () => {
     const paper = await parse(await fs.readFile(sourceFile));
     const guard = new PageFlowGuard();
-    expect(guard.subjectsOnNewPage(paper)).toBe(1);
-    expect(guard.subjectsOnNewPage(paper)).toBe(0);
+    expect(guard.sectionsOnNewPage(paper)).toBe(1);
+    expect(guard.sectionsOnNewPage(paper)).toBe(0);
 
     const pPr = firstChild(paper.sections[1]!.headingNode!, NS.w, 'pPr')!;
     expect(childElements(pPr).filter((child) => child.localName === 'pageBreakBefore')).toHaveLength(1);
@@ -314,6 +332,59 @@ describe('each subject starts a page of its own', () => {
     expect(has(generated.sections[1]!.headingNode!, 'pageBreakBefore')).toBe(true);
     // The subject heading is not part of any question, so no keepNext chain reaches it.
     expect(has(generated.sections[1]!.headingNode!, 'keepNext')).toBe(false);
+  });
+
+  it('marks a division of a subject, which the subject heading above it does not open', async () => {
+    const paper = await parse(await buildPaper(dividedPaper()));
+
+    // PHYSICS opens the document, so only SECTION B is marked.
+    expect(new PageFlowGuard().sectionsOnNewPage(paper)).toBe(1);
+
+    const [sectionA, sectionB] = paper.sections;
+    expect(sectionA!.label).toBe('PHYSICS');
+    expect(sectionB!.label).toBe('PHYSICS - SECTION B');
+    // The first division is opened by the subject heading; it has no division heading.
+    expect(sectionA!.divisionNode).toBeUndefined();
+    expect(has(sectionB!.divisionNode!, 'pageBreakBefore')).toBe(true);
+  });
+
+  it('marks a division in a paper whose subjects were not recognised', async () => {
+    // No subject heading anywhere, so the whole paper is one "ALL" subject - but its
+    // divisions still ask different things of the candidate, so they still open a page.
+    const paper = await parse(await buildPaper(dividedPaper('MODEL TEST PAPER')));
+
+    expect(paper.sections.map((section) => section.label)).toEqual(['ALL', 'SECTION B']);
+    expect(new PageFlowGuard().sectionsOnNewPage(paper)).toBe(1);
+    expect(has(paper.sections[1]!.divisionNode!, 'pageBreakBefore')).toBe(true);
+  });
+
+  it('adds nothing when a typed page break already separates the divisions', async () => {
+    const paper = await parse(await buildPaper(dividedPaper()));
+    const division = paper.sections[1]!.divisionNode!;
+
+    // The author pressed Ctrl+Enter in front of "SECTION B" themselves.
+    const doc = division.ownerDocument!;
+    const typed = doc.createElementNS(NS.w, 'w:p');
+    const run = doc.createElementNS(NS.w, 'w:r');
+    const pageBreak = doc.createElementNS(NS.w, 'w:br');
+    pageBreak.setAttributeNS(NS.w, 'w:type', 'page');
+    run.appendChild(pageBreak);
+    typed.appendChild(run);
+    paper.body.insertBefore(typed, division);
+
+    expect(new PageFlowGuard().sectionsOnNewPage(paper)).toBe(0);
+    expect(has(division, 'pageBreakBefore')).toBe(false);
+  });
+
+  it('reaches the divisions of a generated set', async () => {
+    const dividedFile = path.join(workingDir, 'Divided Paper.docx');
+    await fs.writeFile(dividedFile, await buildPaper(dividedPaper()));
+
+    const result = await service.generate(request({ sourceFile: dividedFile }));
+    expect(result.sets[0]!.verification.ok).toBe(true);
+
+    const generated = await parse(await fs.readFile(result.sets[0]!.filePath));
+    expect(has(generated.sections[1]!.divisionNode!, 'pageBreakBefore')).toBe(true);
   });
 });
 

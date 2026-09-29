@@ -13,4 +13,14 @@ export const IPC = {
    */
   readTheme: 'shuffler:read-theme',
   writeTheme: 'shuffler:write-theme',
+  /**
+   * The sign-in window. These are served to a window whose preload exposes nothing else:
+   * until the right password is typed there is no window that can reach the channels above.
+   */
+  lockStatus: 'shuffler:lock-status',
+  lockSet: 'shuffler:lock-set',
+  lockUnlock: 'shuffler:lock-unlock',
+  lockChange: 'shuffler:lock-change',
+  lockReset: 'shuffler:lock-reset',
+  lockProceed: 'shuffler:lock-proceed',
 } as const;

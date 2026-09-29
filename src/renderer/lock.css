@@ -1,0 +1,126 @@
+/*
+ * The sign-in window.
+ *
+ * Loaded after `styles.css`, which already carries the three appearance modes, the
+ * typography and the look of a text box and a button. Only the things this one small window
+ * needs of its own are here: a card in the middle of a short window, and the four panels -
+ * set a password, enter one, change it, reset it - of which exactly one is ever shown.
+ */
+
+.lock-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.lock {
+  width: 100%;
+  max-width: 420px;
+  padding: 28px 30px 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+
+.lock__header h1 {
+  margin: 0 0 4px;
+  font-size: 19px;
+  font-weight: 600;
+}
+
+.lock__header p {
+  margin: 0 0 20px;
+  color: var(--muted);
+}
+
+/*
+ * One panel at a time. `hidden` rather than a class of our own, so a panel that is out of
+ * the way is also out of the tab order and out of a screen reader's way - which matters
+ * here, where every panel is a row of password boxes that look alike.
+ */
+.lock__panel[hidden] {
+  display: none;
+}
+
+.lock__panel label {
+  margin-top: 14px;
+}
+
+.lock__panel label:first-of-type {
+  margin-top: 0;
+}
+
+.lock__lede {
+  margin: 0 0 18px;
+  color: var(--muted);
+}
+
+.lock__hint {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.lock__panel .button--primary {
+  width: 100%;
+  margin-top: 20px;
+}
+
+.lock__links {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 14px 0 0;
+}
+
+/*
+ * The secondary ways out - change it, I have forgotten it, go back - read as links but are
+ * buttons, because that is what they do. Styled here rather than borrowed from `.button`
+ * so that they stay quieter than the one action the window is actually for.
+ */
+.lock__link {
+  padding: 2px 0;
+  border: none;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.lock__link:hover {
+  text-decoration: none;
+}
+
+.lock__link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/*
+ * What went wrong, under the button. Empty and out of the layout until there is something
+ * to say, so the card does not reserve a blank line for a message that may never come.
+ */
+.lock__message {
+  margin: 16px 0 0;
+  color: var(--bad);
+  font-weight: 550;
+}
+
+.lock__message:empty {
+  display: none;
+}
+
+/* A countdown or a "password changed" line is news, not a fault. */
+.lock__message--calm {
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.lock__message--good {
+  color: var(--ok);
+}

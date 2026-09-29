@@ -140,15 +140,18 @@ export class PaperParser {
         }
       }
 
-      // Only a real heading counts, and only on the division that opens the subject: the
-      // "ALL" fallback section starts at the top of the paper, where the first paragraph is
-      // the paper's title rather than a subject, and "SECTION B" does not start a new page.
+      // Whichever heading opens this run of questions: the subject heading on the division
+      // that opens the subject, the "SECTION B" heading on the ones that follow it. Both
+      // start a page of their own. The "ALL" fallback section has neither - it begins at the
+      // top of the paper, where the first paragraph is the paper's title, not a subject.
       const headingNode = headingIndexes.length > 0 && range.opensSubject ? nodes[0] : undefined;
+      const divisionNode = range.opensSubject ? undefined : nodes[0];
       return {
         subject: range.subject,
         group: range.group,
         label: groupLabel(range.subject, range.group),
         headingNode,
+        divisionNode,
         headerNodes,
         blocks,
         tailNodes,

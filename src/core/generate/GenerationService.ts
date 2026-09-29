@@ -232,6 +232,7 @@ export class GenerationService {
         plan,
         originalAnswers: facts.answers,
         setLabel: setLabel(plan.setNumber),
+        setName: setLabel(plan.setNumber),
         keepQuestionsWhole,
         onStep: (fraction, message) =>
           emit(fraction < 0.55 ? 'options' : fraction < 0.95 ? 'ordering' : 'packaging', plan.setNumber, fraction * BUILD_SHARE, message),

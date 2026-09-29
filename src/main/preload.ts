@@ -7,6 +7,10 @@ import type { IPC } from './channels';
  * A sandboxed preload script cannot `require` relative modules, so the channel names
  * are inlined here. The `satisfies`-style assignment below makes the compiler fail if
  * they ever drift from `src/main/channels.ts`.
+ *
+ * A *subset* of the channels on purpose: the sign-in channels belong to `lock-preload.ts`
+ * and are deliberately out of reach of the window that does the work, which by the time it
+ * exists has already been let in.
  */
 const CHANNELS = {
   pickSourceFile: 'shuffler:pick-source-file',
@@ -19,7 +23,8 @@ const CHANNELS = {
   writeTheme: 'shuffler:write-theme',
 } as const;
 
-const channelsMatchMainProcess: typeof IPC = CHANNELS;
+type AppChannels = Pick<typeof IPC, keyof typeof CHANNELS>;
+const channelsMatchMainProcess: AppChannels = CHANNELS;
 void channelsMatchMainProcess;
 
 /**

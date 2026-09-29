@@ -1,4 +1,5 @@
 import type { Element } from '../docx/dom';
+import { PPR_ORDER, TRPR_ORDER, ensureFlag, ensurePPr } from '../docx/props';
 import { NS, childElements, createElement, descendants, firstChild, ownerDocumentOf } from '../docx/xml';
 import type { ParsedPaper, QuestionBlock } from '../parse/PaperModel';
 import { isEmptyParagraph } from '../parse/PaperParser';
@@ -68,24 +69,30 @@ export class PageFlowGuard {
   }
 
   /**
-   * Starts each subject on a fresh page, by the same rule as the answer key: papers
-   * separate their subjects with blank paragraphs, which stops working once the questions
-   * are re-ordered and the text reflows.
+   * Starts each run of questions on a fresh page, by the same rule as the answer key:
+   * papers separate their subjects with blank paragraphs, which stops working once the
+   * questions are re-ordered and the text reflows.
    *
-   * Skipped for a subject that already opens a page, and for the first subject when it is
-   * the very start of the document - there is nothing to break away from, and asking for a
-   * break there is how a document gains a leading blank page.
+   * A run of questions is a subject, or a division of one - "SECTION B (Attempt any 10
+   * questions)". Both are marked, because both carry rules of their own that the candidate
+   * has to read: a division that begins halfway down a page, under the last option of the
+   * division before it, reads as part of that one. The first division of a subject needs no
+   * mark of its own; the subject heading above it already opens the page.
    *
-   * A paper whose subjects the tool did not recognise has no subject headings to mark, so
-   * nothing happens (its one section covers the whole paper).
+   * Skipped where a page already ends in front of the heading, and for the first subject
+   * when it is the very start of the document - there is nothing to break away from, and
+   * asking for a break there is how a document gains a leading blank page.
    *
-   * Returns how many subjects were marked.
+   * A paper with neither subject nor division headings has nothing to mark, so nothing
+   * happens (its one section covers the whole paper).
+   *
+   * Returns how many headings were marked.
    */
-  subjectsOnNewPage(paper: ParsedPaper): number {
+  sectionsOnNewPage(paper: ParsedPaper): number {
     const body = childElements(paper.body);
     let count = 0;
     for (const section of paper.sections) {
-      const heading = section.headingNode;
+      const heading = section.headingNode ?? section.divisionNode;
       if (!heading) continue;
       const index = body.indexOf(heading);
       if (index <= 0) continue;
@@ -123,69 +130,6 @@ export class PageFlowGuard {
     return true;
   }
 }
-
-/**
- * `w:pPr` children in the order the OOXML schema (CT_PPr) demands. Word rejects a
- * document whose paragraph properties are out of order, so a new flag has to be spliced
- * into the right place rather than appended.
- */
-const PPR_ORDER: readonly string[] = [
-  'pStyle',
-  'keepNext',
-  'keepLines',
-  'pageBreakBefore',
-  'framePr',
-  'widowControl',
-  'numPr',
-  'suppressLineNumbers',
-  'pBdr',
-  'shd',
-  'tabs',
-  'suppressAutoHyphens',
-  'kinsoku',
-  'wordWrap',
-  'overflowPunct',
-  'topLinePunct',
-  'autoSpaceDE',
-  'autoSpaceDN',
-  'bidi',
-  'adjustRightInd',
-  'snapToGrid',
-  'spacing',
-  'ind',
-  'contextualSpacing',
-  'mirrorIndents',
-  'suppressOverlap',
-  'jc',
-  'textDirection',
-  'textAlignment',
-  'textboxTightWrap',
-  'outlineLvl',
-  'divId',
-  'cnfStyle',
-  'rPr',
-  'sectPr',
-  'pPrChange',
-];
-
-/** `w:trPr` children in schema order (CT_TrPr). */
-const TRPR_ORDER: readonly string[] = [
-  'cnfStyle',
-  'divId',
-  'gridBefore',
-  'gridAfter',
-  'wBefore',
-  'wAfter',
-  'cantSplit',
-  'trHeight',
-  'tblHeader',
-  'tblCellSpacing',
-  'jc',
-  'hidden',
-  'ins',
-  'del',
-  'trPrChange',
-];
 
 function isWordElement(node: Element, localName: string): boolean {
   return node.namespaceURI === NS.w && node.localName === localName;
@@ -235,15 +179,6 @@ function collectParagraphs(node: Element, out: Element[]): void {
   out.push(...descendants(node, NS.w, 'p'));
 }
 
-/** `w:pPr` must be the first child of `w:p`. */
-function ensurePPr(paragraph: Element): Element {
-  const existing = firstChild(paragraph, NS.w, 'pPr');
-  if (existing) return existing;
-  const pPr = createElement(ownerDocumentOf(paragraph), 'w:pPr', NS.w);
-  paragraph.insertBefore(pPr, paragraph.firstChild);
-  return pPr;
-}
-
 /** `w:trPr` follows an optional `w:tblPrEx` and precedes the cells. */
 function ensureTrPr(row: Element): Element {
   const existing = firstChild(row, NS.w, 'trPr');
@@ -252,18 +187,4 @@ function ensureTrPr(row: Element): Element {
   const successor = childElements(row).find((child) => !isWordElement(child, 'tblPrEx'));
   row.insertBefore(trPr, successor ?? null);
   return trPr;
-}
-
-/**
- * Adds a boolean property (an empty element means "on") if it is not there already,
- * inserted before the first sibling that the schema orders after it.
- */
-function ensureFlag(props: Element, localName: string, order: readonly string[]): void {
-  if (firstChild(props, NS.w, localName)) return;
-  const rank = order.indexOf(localName);
-  const successor = childElements(props).find((child) => {
-    if (child.namespaceURI !== NS.w) return false;
-    return order.indexOf(child.localName ?? '') > rank;
-  });
-  props.insertBefore(createElement(ownerDocumentOf(props), `w:${localName}`, NS.w), successor ?? null);
 }

@@ -119,8 +119,12 @@ SetVerifier        re-open the written file and prove four properties
 | `core/report/Pdf.ts` | the minimal PDF writer - fonts, text, rules, xref |
 | `core/report/ReportPdf.ts` | typesets a `ReportDocument` onto pages |
 | `shared/answerStyle.ts` | the only boundary between internal A-D slots and the paper's own option names |
-| `main/` | Electron main, preload bridge, IPC channels |
-| `renderer/` | UI. **`renderer.ts` must have zero runtime imports** |
+| `main/` | Electron main, the two preload bridges, IPC channels |
+| `main/AppLock.ts` | the password the app asks for at startup; scrypt + machine id, sealed with DPAPI |
+| `main/AdminSecret.ts` | the administrator's install password, as a salted SHA-256 digest |
+| `main/LockRuntime.ts` | the Electron/Windows half of the lock: `safeStorage` and `MachineGuid` |
+| `renderer/` | UI. **`renderer.ts` and `lock.ts` must both have zero runtime imports** |
+| `installer/` | WiX sources for the MSI, and its hand-written SHA-256 password check |
 | `cli/cli.ts` | headless driver, used for all regression runs |
 
 ### Key data structures
@@ -152,6 +156,18 @@ SetVerifier        re-open the written file and prove four properties
   `scripts/ui-harness.mjs` throws if one appears.
 - **Zip timestamps differ between runs.** To prove determinism, compare the hash of
   `word/document.xml`, never the hash of the `.docx`.
+- **Two preloads, two bridges.** `preload.ts` exposes `window.shuffler` to the app window;
+  `lock-preload.ts` exposes `window.lock` to the sign-in window and *nothing else*, so a
+  page shown before anyone has signed in cannot reach a question paper. Both are sandboxed,
+  so both may only `require('electron')`; `npm run check:preload` loads both the way
+  Electron does and fails if either throws.
+- **The administrator password is not a secret.** It ships in every copy of the installer
+  and the app. Storing the digest keeps it from being *read*; it does not keep it from being
+  worked out. Do not build anything on it that assumes otherwise - it exists to stop the
+  installer being passed around, nothing more.
+- **The MSI is unbuilt.** `installer/*.wxs` is checked as XML and its password check is
+  tested against Node, but WiX could not be downloaded on the machine it was written on, so
+  the dialog and sequence XML have never been through candle/light.
 
 ---
 

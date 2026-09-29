@@ -124,7 +124,7 @@ the shuffler, the tests, the CLI — works without Electron.)
 npm test
 ```
 
-341 unit and end-to-end tests. They build question papers in memory (see
+395 unit and end-to-end tests. They build question papers in memory (see
 `tests/support/PaperFixture.ts`), so they run without any sample document.
 
 To review the UI without Electron and without a real paper:
@@ -155,8 +155,8 @@ npm run cli -- --file "C:\papers\MTP-2.docx" --sets 4 --shuffle-questions --shuf
 
 ## Sharing the app with other people
 
-The people who type these papers should not need Node, npm or a terminal. Two Windows
-builds are set up; both bundle everything, so a recipient installs nothing else.
+The people who type these papers should not need Node, npm or a terminal. Three Windows
+builds are set up; all of them bundle everything, so a recipient installs nothing else.
 
 ### Portable zip — works everywhere
 
@@ -199,9 +199,87 @@ archiver is blocked, and the machine this was written on blocks it.) Either:
 
 Until then, `npm run portable` produces a shareable build with no such dependency.
 
-### Both builds are unsigned
+### MSI installer — asks for an administrator password
 
-There is no code-signing certificate, so the first people to run either build see
+```bash
+npm run msi
+```
+
+Writes `release/Question Paper Shuffler Setup <version>.msi`. Unlike the other two builds
+this one installs **for everyone on the computer**, into `Program Files`, and it will not
+install at all until whoever runs it types the administrator password that was issued with
+it. Windows asks for its own elevation prompt as well, as it does for anything that writes
+to `Program Files`.
+
+Built from `installer/Product.wxs` by `scripts/build-msi.mjs`, which packages the app,
+works out the file list, and runs WiX. WiX is not installed by `npm install`; the script
+looks for it in the usual places and, if it is not there, prints where to get it. Either:
+
+- install the **WiX Toolset v3.14** (`wix314.exe` from the WiX releases page), or
+- point the build at a copy you already have — `set WIX_DIR=D:\path	o\wixin`.
+
+The script also finds the copy electron-builder downloads for its own MSI target, if that
+is already in its cache.
+
+> **Not yet built on this machine.** The network here blocks the download WiX ships
+> through, and no .NET SDK is installed to fetch it another way, so the WiX sources in
+> `installer/` have been written and checked as XML but never compiled. The password check
+> inside them *is* tested — see below — but expect the first `npm run msi` on a machine
+> with WiX to need small corrections to the dialog or sequence XML.
+
+### The two passwords
+
+There are two, and they are for different people.
+
+| | Who sets it | When it is asked for | Where it lives |
+|---|---|---|---|
+| **Administrator password** | Fixed when the app is built | Once, while installing | A salted SHA-256 digest, compiled into the MSI and into the app |
+| **User password** | The person using the app, on first run | Every time the app is opened | `%APPDATA%\question-paper-shufflerpp-lock.dat`, on that computer only |
+
+**The administrator password** is `nextGenUI`, set in `src/main/AdminSecret.ts`. Change it
+there and rebuild; `scripts/build-msi.mjs` reads the digest out of the compiled app, so the
+installer and the app can never end up expecting different words.
+
+What it is worth being clear about: a password that ships inside every copy of the
+installer is not a secret in the cryptographic sense. What is stored is a digest, so
+opening the MSI in Orca — or `dist/main/AdminSecret.js` in Notepad — shows 64 hex
+characters and no password, and that is what keeps it from being passed around. Someone
+determined to disassemble the package can still work out what to type. It is a lock on the
+door, not a vault: it keeps the installer out of the hands of people who were not given the
+password, which is what it is for.
+
+The check runs twice — in the dialog, and again in the install sequence — because only the
+second one is reached by a silent install (`msiexec /i ... /qn ADMINPASSWORD=...`). The
+salt and digest are held in *private* properties, which Windows Installer will not let a
+command line overwrite, so a digest of somebody else's password cannot be substituted.
+
+Windows Installer has no crypto library, so that SHA-256 is written by hand in
+`installer/CheckPassword.js`. `tests/installerPassword.test.ts` runs it under Windows'
+own script host and compares its answers with Node's — on the password itself, on inputs
+either side of every SHA-256 block boundary, on non-ASCII passwords and on random ones —
+so the two implementations cannot drift apart silently.
+
+**The user password** is chosen by whoever uses the app, the first time they open it, and
+asked for every time after that. It never leaves the computer:
+
+- what is stored is scrypt run over the password **and** a Windows installation identifier,
+  so the same password on another machine produces different bytes;
+- that record is then sealed with `safeStorage`, which on Windows is DPAPI — encryption
+  keyed to the signed-in Windows account. Copied to another computer, or opened under
+  another Windows account, the file simply will not decrypt;
+- five wrong tries are free; after that the wait doubles from 30 seconds to a quarter of an
+  hour, and the count survives closing the app, so restarting is not a way round it.
+
+Because the file is per Windows account, each teacher who signs in to a shared computer
+sets their own password and never sees anyone else's.
+
+**A forgotten password** is replaced from the sign-in window itself: *Forgotten your
+password?* asks for the administrator's installation password and sets a new one there and
+then. Generated sets and settings are left alone. That is the only reset in the app.
+
+### None of the builds are signed
+
+There is no code-signing certificate, so the first people to run any of them see
 **"Windows protected your PC"** from SmartScreen. They click *More info* → *Run anyway*.
 The warning is about the missing signature, not about anything the program does; it fades
 as more people run the same file. Buying a certificate (an EV one clears SmartScreen
@@ -352,19 +430,26 @@ Two limits, both deliberate:
 
 Turn it off with `--allow-page-splits` on the command line.
 
-### Each subject and the answer key start a new page
+### Each subject, each section and the answer key start a new page
 
-Always, with no setting to turn it off. Both are structural: a subject that begins halfway
-down a page reads as a continuation of the previous one, and an answer key printed under
-the last question is too easy to hand out with the paper.
+Always, with no setting to turn it off. All three are structural: a subject that begins
+halfway down a page reads as a continuation of the previous one, and an answer key printed
+under the last question is too easy to hand out with the paper.
+
+A **section** of a subject — `SECTION B (Attempt any 10 questions)` under a `SECTION A (All
+questions are compulsory)` — is marked for the same reason, and a stronger one: the two ask
+different things of the candidate, so a section heading that arrives mid-page, under the
+last option of the section above it, is read as part of that section. The first section of
+a subject needs no mark of its own, because the subject heading above it already opens the
+page.
 
 Papers achieve this with a run of blank paragraphs, which works for the original but not
 after shuffling: the text reflows, and blank paragraphs are only worth whatever space is
 left on the page. Group C has no blank paragraphs at all before its answer key, so its
 generated sets ran the key on straight after the last option. The generated paper therefore
-states the intent — `w:pageBreakBefore` on each subject heading and on the "ANSWER KEY"
-heading (or, in a paper that has no such heading, on the first paragraph inside the key
-table).
+states the intent — `w:pageBreakBefore` on each subject heading, on each section heading
+that opens a section of its own, and on the "ANSWER KEY" heading (or, in a paper that has
+no such heading, on the first paragraph inside the key table).
 
 Nothing is added when a break is already there — a typed page break, a next-page section
 break, or the property itself — so no paper gains a blank page. Two more cases are left
@@ -375,8 +460,10 @@ alone:
   *header*), so it already opens page 1 and asking for a break there is how a document
   gains a leading blank page. A paper with a cover line above its first subject *does* get
   the break, so the cover keeps a page to itself.
-- **A paper with no subject headings.** Its single section covers the whole paper and its
-  first paragraph is the paper's own title, not a subject, so there is nothing to mark.
+- **A paper with neither subject nor section headings.** Its single run of questions covers
+  the whole paper and its first paragraph is the paper's own title, not a subject, so there
+  is nothing to mark. A single-topic paper that *is* divided into sections — Extra MTP-1 —
+  still gets the break on its `SECTION B`.
 
 Measured with Word on a Group C set, same shuffle, with the breaks stripped and applied:
 
@@ -389,8 +476,19 @@ Measured with Word on a Group C set, same shuffle, with the breaks stripped and 
 | Pages | 33 | 34 |
 | Pages with no text | none | none |
 
-Across the sample folder: the five multi-subject papers get a break on `CHEMISTRY` and
-`BIOLOGY`; the four single-topic papers are untouched.
+Across the sample folder, counting the headings marked in each paper:
+
+| Paper | Subjects | Sections | Breaks added |
+| --- | --- | --- | --- |
+| MTP-2-XI-2023 | 3 | 5 | 7 |
+| FST-1 | 7 | 2 | 8 |
+| Groups A, B, C, D | 3 | 0 | 2 each |
+| Extra MTP-1 | 0 | 1 | 1 |
+| Alternating Current, Animal Kingdom, the two Nano papers | 0 | 0 | 0 |
+
+One fewer break than there are headings in the multi-subject papers, because the first
+subject opens the document. `MTP-2-XI-2023` counts `BIOLOGY PART 2` among its sections: a
+`PART` heading divides a subject the same way a `SECTION` heading does.
 
 ## Outputs
 
@@ -418,11 +516,52 @@ Each generated paper:
   re-ordering blocks renumbers them);
 - carries the answer key for **that** set, in the original table, with the set label
   appended to the answer-key title (`MODEL TEST PAPER-2 (A)  –  SET A`);
+- says which set it is at the top right of **every page** (see below);
 - keeps every embedded MathType/OLE equation, image, table, style, header and footer
-  from the source, because the tool edits `word/document.xml` and copies every other part
-  of the package byte-for-byte;
+  from the source, because the tool edits `word/document.xml` and the page headers, and
+  copies every other part of the package byte-for-byte;
 - keeps every question whole on one page (see below);
-- starts each subject, and the answer key, on a page of its own (see below).
+- starts each subject, each section of a subject, and the answer key, on a page of its
+  own (see below).
+
+### Every page says which set it is
+
+A set leaves this tool as a .docx and reaches a candidate as a stack of loose printed
+pages. By then the file name is gone and the answer key is elsewhere, so the paper has to
+say which set it is on the page itself — and the page header is the one place that
+repeats on every page without touching a word of the paper.
+
+```
+                                                       SET A     <- page 1, bold, 2pt larger
+                                                       SET A     <- every page after
+```
+
+Page one announces the set; the rest confirm it. Word draws a different header on page one
+only when the section asks for one (`w:titlePg`), which none of the sample papers do, so
+the first-page header is built here as **a copy of the paper's own default header** plus the
+set name. That is what keeps page one looking exactly as it did — every sample paper keeps
+a WordArt watermark in its header, and the copy brings the header's own relationships with
+it, so a picture in the header is not left pointing at nothing.
+
+Three details:
+
+- **The set name joins a header line that prints nothing** — the watermark line every one
+  of these papers has — rather than opening a line of its own. The header does not grow,
+  so the body is not pushed down and the paper does not gain a page. A header that already
+  says something (`MTP-2-XI-2023` has a name in its own) gets the set name on a line above
+  that text, which is where "top right" puts it.
+- **It is sized from the paper's own headers.** The `Header` style's own size if it names
+  one, otherwise the document's default: page one sits 2pt above that and the pages after
+  it sit at it, never below 8pt. Nothing to read means 11pt, Word's own default. So a paper
+  written at 12pt gets 14pt bold on page one and 12pt after it; one written at 11pt gets
+  13pt and 11pt.
+- **A paper that already asks for a different first page keeps the header it wrote.** The
+  set name is added to it rather than replacing it.
+
+A paper with no header at all gets one, since otherwise the set name would have nowhere to
+go. Everything the package needs comes with it: the new part is declared in
+`[Content_Types].xml` and reached through a new relationship, so Word opens the file
+without offering to repair it.
 
 `_generation-report.pdf` records, per run: the run seed, the paper structure, the questions
 whose options could not be shuffled (and why), the questions worth excluding, the
@@ -439,7 +578,7 @@ therefore be read straight against the generated set's key without translating a
 ## How it works
 
 ```
-DocxPackage        read/write the .docx zip; only word/document.xml is modified
+DocxPackage        read/write the .docx zip; word/document.xml and the page headers
   NumberingIndex   which Word lists number questions (decimal) vs letter options
   PaperParser      body nodes -> subjects -> question blocks (+ answer key table)
   OptionSetParser  the four options, whichever way the paper labels them:
@@ -448,7 +587,8 @@ DocxPackage        read/write the .docx zip; only word/document.xml is modified
   ShufflePlanner   pure plan: question order per subject + option permutation per question
   SetBuilder       applies a plan: swap option contents, re-order blocks, rewrite the key
   PageFlowGuard    marks each question so a page break cannot cut it in half, and starts
-                   each subject and the answer key on a page of its own
+                   each subject, each section of one and the answer key on its own page
+  HeaderStamp      prints the set name at the top right of every page
   SetVerifier      re-opens the written file and proves it is correct
 GenerationService  inspect / dryRun / generate; used by both the UI and the CLI
 ```
@@ -755,16 +895,19 @@ src/core/docx/             .docx package + XML helpers
 src/core/parse/            numbering, paper structure, answer key
 src/core/options/          the two option layouts, atoms, applying a permutation
 src/core/shuffle/          seeded RNG and the pure shuffle planner
-src/core/generate/         set builder, page flow, output folder, report, orchestration
+src/core/generate/         set builder, page flow, page headers, output folder,
+                           report, orchestration
 src/core/report/           the PDF writer and the report layout
 src/core/verify/           post-generation verification
-src/main/                  Electron main process + preload bridge
-src/renderer/              UI (HTML/CSS/TS, no framework)
+src/main/                  Electron main process, the two preload bridges, the
+                           sign-in lock and the administrator secret
+src/renderer/              UI (HTML/CSS/TS, no framework), including the sign-in window
 src/cli/                   headless entry point
 tests/                     unit + end-to-end tests with an in-memory paper fixture
-scripts/                   build helpers, the icon, the portable zip, diagnostics
+scripts/                   build helpers, the icon, the portable zip, the MSI, diagnostics
 build/                     icon.ico, the only build resource electron-builder needs
-electron-builder.yml       how the Windows installer is put together
+installer/                 WiX sources for the MSI and its password check
+electron-builder.yml       how the portable build and the .exe installer are put together
 release/                   generated builds (git-ignored)
 ```
 

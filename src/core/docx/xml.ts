@@ -8,7 +8,13 @@ export const NS = {
   r: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
   m: 'http://schemas.openxmlformats.org/officeDocument/2006/math',
   wp: 'http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing',
+  /** Markup compatibility: `mc:Choice` / `mc:Fallback` around a shape Word may not know. */
+  mc: 'http://schemas.openxmlformats.org/markup-compatibility/2006',
   xml: 'http://www.w3.org/XML/1998/namespace',
+  /** `[Content_Types].xml` - which part is what kind of XML. */
+  contentTypes: 'http://schemas.openxmlformats.org/package/2006/content-types',
+  /** `_rels/*.rels` - which part points at which. */
+  packageRels: 'http://schemas.openxmlformats.org/package/2006/relationships',
 } as const;
 
 const XML_PROLOG_RE = /^\s*<\?xml[^>]*\?>\s*/;

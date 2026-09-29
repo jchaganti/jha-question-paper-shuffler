@@ -6,6 +6,7 @@ import {
   NS,
   childElements,
   createElement,
+  descendants,
   firstChild,
   ownerDocumentOf,
   preserveSpace,
@@ -13,6 +14,7 @@ import {
   visibleText,
 } from '../docx/xml';
 import { OptionSetParser } from '../options/OptionSetParser';
+import { HeaderStamp } from './HeaderStamp';
 import { PageFlowGuard } from './PageFlow';
 import { NumberingIndex } from '../parse/NumberingIndex';
 import { PaperParser } from '../parse/PaperParser';
@@ -31,6 +33,8 @@ export interface BuildSetInput {
   readonly originalAnswers: ReadonlyMap<number, OptionLetter>;
   /** Text appended to the answer-key title, e.g. "SET 01". Empty to disable. */
   readonly setLabel: string;
+  /** The set's name as it is printed in the page header, e.g. "SET A". Empty to disable. */
+  readonly setName: string;
   /** Mark every question so that it is never split over a page break. */
   readonly keepQuestionsWhole: boolean;
   readonly onStep?: BuildStepListener;
@@ -69,6 +73,7 @@ export class SetBuilder {
   constructor(
     private readonly parser: PaperParser = new PaperParser(),
     private readonly pageFlow: PageFlowGuard = new PageFlowGuard(),
+    private readonly header: HeaderStamp = new HeaderStamp(),
   ) {}
 
   async build(input: BuildSetInput): Promise<BuiltSet> {
@@ -158,14 +163,17 @@ export class SetBuilder {
     //    next one. Applied after re-ordering, because shuffling changes which question
     //    lands where and so which ones would have been cut in half.
     const questionsKeptWhole = input.keepQuestionsWhole ? this.pageFlow.keepQuestionsWhole(paper) : 0;
-    // Each subject, and the answer key, always opens a page of its own. Both are structural
-    // and not optional: papers separate these with blank paragraphs, which only works until
-    // the text reflows.
-    this.pageFlow.subjectsOnNewPage(paper);
+    // Each subject, each division of a subject, and the answer key always opens a page of
+    // its own. All three are structural and not optional: papers separate these with blank
+    // paragraphs, which only works until the text reflows.
+    this.pageFlow.sectionsOnNewPage(paper);
     this.pageFlow.answerKeyOnNewPage(paper);
 
-    // 4. Stamp the set label onto the answer-key title line.
+    // 4. Say which set this is: on the answer-key title line, and at the top right of
+    //    every page. The header stamp edits the header parts and the section properties,
+    //    so it runs before the document part is written back.
     if (input.setLabel) stampSetLabel(paper, input.setLabel);
+    this.header.apply(pkg, part, input.setName);
 
     pkg.setPartText('word/document.xml', part.serialize());
     const buffer = await pkg.toBuffer();

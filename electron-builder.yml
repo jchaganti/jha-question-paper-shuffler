@@ -8,6 +8,12 @@
 #
 # Nothing here is signed. Windows SmartScreen will therefore warn the first few people who
 # run it - see the "Sharing the installer" section of README.md for what to tell them.
+#
+# There is a third build that is *not* configured here: the MSI, which installs for every
+# user of a computer and asks for an administrator password before it will install at all.
+# It is built by `npm run msi` from `installer/Product.wxs` using WiX, which electron-builder
+# is not involved in. Both builds carry the same app, and the app asks the person running it
+# for their own password either way.
 
 appId: com.jha.question-paper-shuffler
 productName: Question Paper Shuffler

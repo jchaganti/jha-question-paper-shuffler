@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The MSI installer for Question Paper Shuffler.
+
+  Built by `npm run msi`, which packages the app, works out the file list, and calls WiX.
+  See `scripts/build-msi.mjs`; nothing here is written by hand except this file, the password
+  dialog below it and `CheckPassword.js`.
+
+  Two things make this different from the ordinary `.exe` installer in `electron-builder.yml`:
+
+  1. It installs **for everyone on the computer**, into Program Files, so one installation
+     serves every teacher who signs in to that machine. Windows asks for administrator
+     rights for that by itself.
+  2. It asks for the administrator's own password before it will install anything. The
+     check is in two places - the dialog, and the install sequence - because only the second
+     one is reached by a silent, command-line install.
+
+  The variables come from the build script: -dVersion, -dAppDir, -dInstallerDir,
+  -dAdminSalt, -dAdminDigest.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product
+    Id="*"
+    Name="Question Paper Shuffler"
+    Language="1033"
+    Version="$(var.Version)"
+    Manufacturer="Jha Classes"
+    UpgradeCode="6105F3F2-4C45-46B3-BB90-7685CF0C6E79">
+
+    <Package
+      InstallerVersion="500"
+      Compressed="yes"
+      InstallScope="perMachine"
+      Platform="x64"
+      Description="Question Paper Shuffler"
+      Manufacturer="Jha Classes" />
+
+    <!-- Installing a newer version replaces the old one rather than sitting beside it. -->
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Question Paper Shuffler is already installed on this computer." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <!--
+      The text on the installer's first page. WixUI_InstallDir always shows one, so there has
+      to be a file here; the wording is Jha Classes' own and can be rewritten without
+      touching anything else.
+    -->
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.InstallerDir)\License.rtf" />
+
+    <Icon Id="AppIcon.exe" SourceFile="$(var.AppDir)\Question Paper Shuffler.exe" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon.exe" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <!--
+      The password, and what it is checked against.
+
+      ADMINPASSWORD is public - all capitals - because it has to survive from the dialog into
+      the install sequence, and because a silent install passes it on the command line. It is
+      Hidden so that it does not appear in an installer log, and Secure so that it carries
+      across the elevation to the part of the install that runs with administrator rights.
+
+      AdminSalt and AdminDigest are deliberately *not* capitals. A mixed-case property is
+      private: Windows Installer refuses to let the command line set it. That is what stops
+      someone installing with a password of their own and the matching digest beside it.
+    -->
+    <Property Id="ADMINPASSWORD" Secure="yes" Hidden="yes" />
+    <Property Id="ADMINPASSWORDOK" Value="0" />
+    <Property Id="ADMINPASSWORDMESSAGE" Value="" />
+    <Property Id="AdminSalt" Value="$(var.AdminSalt)" />
+    <Property Id="AdminDigest" Value="$(var.AdminDigest)" />
+
+    <Binary Id="PasswordCheck" SourceFile="$(var.InstallerDir)\CheckPassword.js" />
+
+    <CustomAction
+      Id="CheckAdminPassword"
+      BinaryKey="PasswordCheck"
+      JScriptCall="CheckAdminPassword"
+      Execute="immediate"
+      Return="ignore" />
+
+    <CustomAction
+      Id="RequireAdminPassword"
+      BinaryKey="PasswordCheck"
+      JScriptCall="RequireAdminPassword"
+      Execute="immediate"
+      Return="check" />
+
+    <!--
+      The gate. Before Windows Installer decides what to install, and only when something is
+      actually being installed - repairing or removing the app does not ask again, because by
+      then the administrator's password has already been given once and Windows requires
+      administrator rights to uninstall a per-machine program anyway.
+    -->
+    <InstallExecuteSequence>
+      <Custom Action="RequireAdminPassword" Before="LaunchConditions">NOT Installed AND NOT REMOVE</Custom>
+    </InstallExecuteSequence>
+
+    <!--
+      The password dialog is shown before the welcome page, as its own step in the sequence.
+      Adding a step is all it does: the standard WixUI_InstallDir flow underneath is left
+      exactly as it comes, which is what keeps this installer's UI boring and predictable.
+    -->
+    <InstallUISequence>
+      <Show Dialog="AdminPasswordDlg" Before="WelcomeDlg">NOT Installed</Show>
+    </InstallUISequence>
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLFOLDER" Name="Question Paper Shuffler" />
+      </Directory>
+      <Directory Id="ProgramMenuFolder" />
+      <Directory Id="DesktopFolder" />
+    </Directory>
+
+    <!--
+      The shortcuts. Their key path is a registry value rather than a file, because a
+      per-machine shortcut lives in a folder that is not part of this component.
+    -->
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="Shortcuts" Guid="*" Win64="yes">
+        <Shortcut
+          Id="StartMenuShortcut"
+          Directory="ProgramMenuFolder"
+          Name="Question Paper Shuffler"
+          Description="Generate shuffled sets of a question paper, each with its own answer key"
+          Target="[INSTALLFOLDER]Question Paper Shuffler.exe"
+          WorkingDirectory="INSTALLFOLDER" />
+        <Shortcut
+          Id="DesktopShortcut"
+          Directory="DesktopFolder"
+          Name="Question Paper Shuffler"
+          Description="Generate shuffled sets of a question paper, each with its own answer key"
+          Target="[INSTALLFOLDER]Question Paper Shuffler.exe"
+          WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue
+          Root="HKLM"
+          Key="Software\Jha Classes\Question Paper Shuffler"
+          Name="installed"
+          Type="integer"
+          Value="1"
+          KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="App" Title="Question Paper Shuffler" Level="1" AllowAdvertise="no" Absent="disallow">
+      <!-- Written by the build script from the packaged folder. -->
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="Shortcuts" />
+    </Feature>
+
+    <UIRef Id="WixUI_InstallDir" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLFOLDER" />
+
+    <UI>
+      <!--
+        The administrator's password.
+
+        Laid out like the standard WiX dialogs so it does not look like a different program:
+        the same 370x270 box, the same banner across the top, the same three buttons along
+        the bottom. Back is disabled because this is the first thing shown.
+      -->
+      <Dialog Id="AdminPasswordDlg" Width="370" Height="270" Title="[ProductName] Setup" NoMinimize="yes">
+        <Control Id="BannerBitmap" Type="Bitmap" X="0" Y="0" Width="370" Height="44" TabSkip="no" Text="WixUI_Bmp_Banner" />
+        <Control Id="BannerLine" Type="Line" X="0" Y="44" Width="370" Height="0" />
+        <Control Id="BottomLine" Type="Line" X="0" Y="234" Width="370" Height="0" />
+
+        <Control Id="Title" Type="Text" X="15" Y="6" Width="200" Height="15" Transparent="yes" NoPrefix="yes"
+                 Text="{\WixUI_Font_Title}Administrator password" />
+        <Control Id="Description" Type="Text" X="25" Y="23" Width="330" Height="15" Transparent="yes" NoPrefix="yes"
+                 Text="This program may only be installed by an administrator." />
+
+        <Control Id="Explain" Type="Text" X="25" Y="60" Width="320" Height="36" NoPrefix="yes"
+                 Text="Type the password you were given with this installer. Setup will not continue without it." />
+
+        <Control Id="PasswordLabel" Type="Text" X="25" Y="106" Width="320" Height="12" NoPrefix="yes" Text="&amp;Password:" />
+        <Control Id="PasswordEdit" Type="Edit" X="25" Y="120" Width="320" Height="18" Property="ADMINPASSWORD" Password="yes" />
+
+        <!-- Empty until the check has been run and failed; the text follows the property. -->
+        <Control Id="Message" Type="Text" X="25" Y="146" Width="320" Height="30" NoPrefix="yes" Text="[ADMINPASSWORDMESSAGE]" />
+
+        <Control Id="Back" Type="PushButton" X="180" Y="243" Width="56" Height="17" Disabled="yes" Text="&amp;Back" />
+        <Control Id="Next" Type="PushButton" X="236" Y="243" Width="56" Height="17" Default="yes" Text="&amp;Next">
+          <Publish Event="DoAction" Value="CheckAdminPassword" Order="1">1</Publish>
+          <Publish Event="EndDialog" Value="Return" Order="2">ADMINPASSWORDOK = "1"</Publish>
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="304" Y="243" Width="56" Height="17" Cancel="yes" Text="Cancel">
+          <Publish Event="SpawnDialog" Value="CancelDlg">1</Publish>
+        </Control>
+      </Dialog>
+    </UI>
+  </Product>
+</Wix>

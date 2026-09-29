@@ -12,6 +12,7 @@
     "pack": "npm run build && npm run icon && electron-builder --win --dir",
     "portable": "npm run pack && node scripts/portable-zip.mjs",
     "dist": "npm run build && npm run icon && electron-builder --win",
+    "msi": "npm run pack && node scripts/build-msi.mjs",
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "tsc -p tsconfig.renderer.json",
     "build:assets": "node scripts/copy-assets.mjs",

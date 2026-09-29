@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:;" />
+    <title>Question Paper Shuffler</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="lock.css" />
+  </head>
+  <body class="lock-body">
+    <main class="lock">
+      <header class="lock__header">
+        <h1>Question Paper Shuffler</h1>
+        <p id="lock-subtitle">Enter your password to open the app.</p>
+      </header>
+
+      <!-- First run: nobody has chosen a password on this computer yet. -->
+      <form class="lock__panel" id="panel-set" novalidate>
+        <p class="lock__lede">
+          Choose the password this computer will ask for each time the app is opened. It is
+          yours, not the administrator&rsquo;s, and it is stored only on this computer.
+        </p>
+        <label for="set-password">New password</label>
+        <input type="password" id="set-password" autocomplete="new-password" spellcheck="false" />
+        <label for="set-confirm">Type it again</label>
+        <input type="password" id="set-confirm" autocomplete="new-password" spellcheck="false" />
+        <p class="lock__hint">At least 8 characters. Write it down somewhere safe.</p>
+        <button type="submit" class="button button--primary" id="set-submit">Set password and open the app</button>
+      </form>
+
+      <!-- Every run after that. -->
+      <form class="lock__panel" id="panel-enter" novalidate>
+        <label for="enter-password">Password</label>
+        <input type="password" id="enter-password" autocomplete="current-password" spellcheck="false" />
+        <button type="submit" class="button button--primary" id="enter-submit">Open the app</button>
+        <p class="lock__links">
+          <button type="button" class="lock__link" id="go-change">Change password</button>
+          <button type="button" class="lock__link" id="go-reset">Forgotten your password?</button>
+        </p>
+      </form>
+
+      <form class="lock__panel" id="panel-change" novalidate>
+        <label for="change-current">Current password</label>
+        <input type="password" id="change-current" autocomplete="current-password" spellcheck="false" />
+        <label for="change-new">New password</label>
+        <input type="password" id="change-new" autocomplete="new-password" spellcheck="false" />
+        <label for="change-confirm">Type the new one again</label>
+        <input type="password" id="change-confirm" autocomplete="new-password" spellcheck="false" />
+        <button type="submit" class="button button--primary" id="change-submit">Change password</button>
+        <p class="lock__links">
+          <button type="button" class="lock__link" id="change-cancel">Back</button>
+        </p>
+      </form>
+
+      <form class="lock__panel" id="panel-reset" novalidate>
+        <p class="lock__lede">
+          A forgotten password can only be replaced by the administrator who installed the
+          app, using the same password they typed to install it. Your generated sets and
+          settings are left alone.
+        </p>
+        <label for="reset-admin">Administrator&rsquo;s installation password</label>
+        <input type="password" id="reset-admin" autocomplete="off" spellcheck="false" />
+        <label for="reset-new">New password</label>
+        <input type="password" id="reset-new" autocomplete="new-password" spellcheck="false" />
+        <label for="reset-confirm">Type the new one again</label>
+        <input type="password" id="reset-confirm" autocomplete="new-password" spellcheck="false" />
+        <button type="submit" class="button button--primary" id="reset-submit">Set a new password</button>
+        <p class="lock__links">
+          <button type="button" class="lock__link" id="reset-cancel">Back</button>
+        </p>
+      </form>
+
+      <p class="lock__message" id="lock-message" role="alert"></p>
+    </main>
+    <script type="module" src="lock.js"></script>
+  </body>
+</html>
